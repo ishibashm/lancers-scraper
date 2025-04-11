@@ -25,8 +25,8 @@ def parse_arguments():
                       help='検索クエリ（例：Python, Web開発）')
     parser.add_argument('--output', '-o', type=str, default=None,
                       help='出力ファイル名（指定しない場合は自動生成）')
-    parser.add_argument('--headless', action='store_true', default=True,
-                      help='ヘッドレスモードで実行（デフォルト：True）')
+    parser.add_argument('--no-headless', action='store_true', default=False,
+                      help='ヘッドレスモードを無効にする（デフォルト：有効）')
     return parser.parse_args()
 
 async def scrape_lancers(search_query: str, output_file: Optional[str] = None, headless: bool = True):
@@ -47,7 +47,7 @@ async def scrape_lancers(search_query: str, output_file: Optional[str] = None, h
         csv_handler = CSVHandler()
 
         # ブラウザでスクレイピングを実行
-        with browser:
+        async with browser:
             # 検索実行と結果取得
             raw_results = await browser.search_short_videos(search_query)
             if not raw_results:
@@ -80,7 +80,7 @@ async def main():
         await scrape_lancers(
             search_query=args.search_query,
             output_file=args.output,
-            headless=args.headless
+            headless=not args.no_headless
         )
 
     except KeyboardInterrupt:
