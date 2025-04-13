@@ -8,9 +8,11 @@ Lancersの案件情報を自動的にスクレイピングし、CSVファイル�
 - 以下の情報を収集：
   - 案件タイトル
   - 案件URL（https://www.lancers.jp/work/detail/[数字]）
-  - 締切日時
-  - 希望納期
-  - 募集人数
+  - 案件ID
+  - 報酬
+  - 案件種別（プロジェクト、コンペ、タスクなど）
+  - 募集状態
+  - 締切情報
 - CSV形式でのデータ保存
 - 環境変数による柔軟な設定
 - ヘッドレスモードでの実行対応
@@ -63,21 +65,25 @@ cp .env.example .env
 ### 基本的な使用方法
 
 ```bash
-# 基本的な検索
-python src/main.py -q "Python開発"
+# 基本的な検索（ヘッドレスモードで実行）
+python src/main.py --search-query "Python開発"
 
 # 出力ファイル名を指定して検索
-python src/main.py -q "Web開発" -o "web_dev_jobs.csv"
+python src/main.py --search-query "Web開発" --output "web_dev_jobs.csv"
 
 # ブラウザを表示して実行（デバッグ用）
-python src/main.py -q "データ分析" --headless=false
+python src/main.py --search-query "データ分析" --no-headless
+
+# 案件詳細情報も取得
+python src/main.py --search-query "動画編集" --with-details
 ```
 
 ### コマンドラインオプション
 
 - `-q`, `--search-query`: 検索クエリ（必須）
 - `-o`, `--output`: 出力ファイル名（オプション、指定しない場合は自動生成）
-- `--headless`: ヘッドレスモードの切り替え（デフォルト：True）
+- `--no-headless`: ブラウザを表示して実行（デフォルト：非表示）
+- `--with-details`: 案件詳細情報も取得（デフォルト：取得しない）
 
 ## 設定
 
@@ -100,9 +106,10 @@ CSVファイルには以下の情報が含まれます：
 - `title`: 案件タイトル
 - `url`: 案件のURL
 - `work_id`: 案件ID
-- `deadline`: 締切日時
-- `delivery_date`: 希望納期
-- `people`: 募集人数
+- `price`: 報酬
+- `type`: 案件種別
+- `deadline`: 締切情報
+- `status`: 募集状態
 - `scraped_at`: スクレイピング実行日時
 
 ## 注意事項
