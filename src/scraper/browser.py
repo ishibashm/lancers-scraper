@@ -182,7 +182,9 @@ class LancersBrowser:
         try:
             # Lancersの検索ページにアクセス
             base_url = "https://www.lancers.jp/work/search"
-            url = f"{base_url}?page={start_page}&keyword={search_query}"
+            url = f"{base_url}?keyword={search_query}&show_description=1&sort=started&work_rank[]=0&work_rank[]=2&work_rank[]=3"
+            if start_page > 1:
+                url += f"&page={start_page}"
             await self.page.goto(url)
             self.logger.info(f"検索ページにアクセスしました: {search_query} (ページ {start_page})")
 
