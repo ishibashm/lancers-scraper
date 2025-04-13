@@ -4,6 +4,8 @@ from typing import Optional, List, Dict, Any
 import logging
 import time
 import asyncio
+import re  # 正規表現を使用するために追加
+import urllib.parse
 
 class LancersBrowser:
     def __init__(self, headless: bool = True, max_pages: int = 5):
@@ -18,6 +20,7 @@ class LancersBrowser:
         self.browser: Optional[Browser] = None
         self.page: Optional[Page] = None
         self.playwright = None
+        self.base_url = "https://www.lancers.jp/work/search"
         
         # ロギングの設定
         logging.basicConfig(
@@ -51,96 +54,53 @@ class LancersBrowser:
             self.logger.error(f"ブラウザの終了に失敗しました: {str(e)}")
             raise
 
-    async def _extract_work_info(self, card) -> Optional[Dict[str, str]]:
+    async def _extract_work_info(self, card) -> Optional[Dict[str, Any]]:
         """
         案件カードから情報を抽出する
         Args:
-            card: 案件カード要素
+            card: 案件カードの要素
         Returns:
-            Optional[Dict[str, str]]: 抽出された案件情報
+            Dict[str, Any]: 抽出した情報
         """
         try:
-            # デバッグのためにより詳細なカードHTMLを取得
-            card_html = await card.inner_html()
-            self.logger.info(f"カードHTML（一部）: {card_html[:300]}...")
+            # タイトルとURL
+            title_elem = await card.query_selector('.p-search-job-media__title')
+            url_elem = await card.query_selector('a.p-search-job-media__title')
             
-            # すべてのテキスト要素を列挙してデバッグ
-            all_texts = await card.evaluate('el => Array.from(el.querySelectorAll("*")).map(node => node.textContent.trim()).filter(text => text.length > 0)')
-            self.logger.info(f"全テキスト要素: {all_texts[:10]}...")
+            # 報酬
+            price_elem = await card.query_selector('.p-search-job-media__price')
             
-            # すべてのspanタグを列挙
-            all_spans = await card.query_selector_all('span')
-            span_texts = []
-            for span in all_spans:
-                span_text = await span.text_content()
-                span_class = await span.get_attribute('class')
-                if span_text.strip():
-                    span_texts.append(f"[{span_class}] {span_text.strip()}")
+            # 案件種別
+            type_elem = await card.query_selector('.c-badge__text')
             
-            self.logger.info(f"すべてのspan: {span_texts[:5]}...")
+            # 締切
+            deadline_elem = await card.query_selector('.p-search-job-media__time-remaining')
             
-            # タイトルと URL
-            title_elem = await card.query_selector('.c-media__title, h3.c-heading')
+            # 募集状態
+            status_elem = await card.query_selector('.p-search-job-media__time-text')
+
+            # データの抽出
             title = await title_elem.text_content() if title_elem else "タイトルなし"
-            
-            url_elem = await card.query_selector('a.c-media__title, a[href*="/work/detail/"]')
             url = await url_elem.get_attribute('href') if url_elem else ""
-            
-            # 募集情報を含むすべての要素をチェック
-            deadline = "期限なし"
-            delivery_date = "納期未設定"
-            people = "人数未設定"
-            
-            # 締切日時と希望納期を探す
-            schedule_items = await card.query_selector_all('.p-work-detail-schedule__item')
-            for item in schedule_items:
-                item_text = await item.text_content()
-                item_html = await item.inner_html()
-                self.logger.info(f"スケジュールアイテム: {item_text.strip()} - HTML: {item_html[:50]}...")
-                
-                if "締切" in item_text:
-                    deadline = item_text.strip()
-                if "納期" in item_text or "希望" in item_text:
-                    delivery_date = item_text.strip()
-            
-            # 募集人数を探す - さまざまなセレクタを試す
-            recruit_selectors = [
-                '.c-media__start-recruit-number',
-                '[class*="recruit-number"]',
-                'p.u-text-center',
-                '.p-work-detail-reward'
-            ]
-            
-            for selector in recruit_selectors:
-                elements = await card.query_selector_all(selector)
-                for elem in elements:
-                    elem_text = await elem.text_content()
-                    if "人" in elem_text:
-                        people = elem_text.strip()
-                        break
-                if people != "人数未設定":
-                    break
-            
-            # URL処理（相対パスか絶対パスかを判定）
+            price = await price_elem.text_content() if price_elem else "報酬未設定"
+            work_type = await type_elem.text_content() if type_elem else "種別不明"
+            deadline = await deadline_elem.text_content() if deadline_elem else "期限なし"
+            status = await status_elem.text_content() if status_elem else "状態不明"
+
+            # URLの処理
             full_url = url if url.startswith("http") else f"https://www.lancers.jp{url}"
-            
-            # 案件IDを抽出
-            import re
-            work_id = ""
-            match = re.search(r'/work/detail/(\d+)', full_url)
-            if match:
-                work_id = match.group(1)
             
             return {
                 'title': title.strip(),
                 'url': full_url,
-                'work_id': work_id,
-                'deadline': deadline,
-                'delivery_date': delivery_date,
-                'people': people
+                'price': price.strip(),
+                'type': work_type.strip(),
+                'deadline': deadline.strip(),
+                'status': status.strip()
             }
+            
         except Exception as e:
-            self.logger.warning(f"案件情報の抽出に失敗しました: {str(e)}")
+            self.logger.error(f"案件情報の抽出中にエラーが発生しました: {str(e)}")
             return None
 
     async def _has_next_page(self) -> bool:
@@ -159,74 +119,87 @@ class LancersBrowser:
             bool: 移動が成功したかどうか
         """
         try:
-            next_button = await self.page.query_selector('a.c-pagination__next:not(.is-disabled)')
-            if next_button:
-                await next_button.click()
-                await self.page.wait_for_load_state('networkidle')
-                await asyncio.sleep(2)  # 追加の待機時間
-                return True
-            return False
+            current_url = self.page.url
+            self.logger.info("=" * 50)
+            self.logger.info(f"ページ遷移前のURL: {current_url}")
+            
+            # URLをパースして各パラメータを取得
+            parsed_url = urllib.parse.urlparse(current_url)
+            params = urllib.parse.parse_qs(parsed_url.query)
+            
+            # 現在のページ番号を取得
+            current_page = int(params.get('page', [1])[0])
+            next_page = current_page + 1
+            
+            # パラメータを更新
+            params['page'] = [str(next_page)]
+            
+            # 新しいURLを構築
+            new_query = urllib.parse.urlencode(params, doseq=True)
+            next_url = urllib.parse.urlunparse((
+                parsed_url.scheme,
+                parsed_url.netloc,
+                parsed_url.path,
+                parsed_url.params,
+                new_query,
+                parsed_url.fragment
+            ))
+            
+            self.logger.info(f"生成された次ページのURL: {next_url}")
+            self.logger.info("=" * 50)
+            
+            # 次のページに移動
+            await self.page.goto(next_url)
+            await self.page.wait_for_load_state('networkidle')
+            await asyncio.sleep(2)  # 追加の待機時間
+            
+            # 移動後の確認
+            self.logger.info("=" * 50)
+            self.logger.info(f"移動後の実際のURL: {self.page.url}")
+            self.logger.info("=" * 50)
+            
+            return True
+            
         except Exception as e:
             self.logger.error(f"次のページへの移動に失敗しました: {str(e)}")
             return False
 
     async def search_short_videos(self, search_query: str, start_page: int = 1) -> List[Dict[str, Any]]:
-        """
-        ショート動画で検索を実行し、結果を取得する
-        Args:
-            search_query (str): 検索クエリ
-            start_page (int): 開始ページ番号
-        Returns:
-            List[Dict[str, Any]]: 検索結果のリスト
-        """
         try:
-            # Lancersの検索ページにアクセス
+            # 正しいURL形式で構築
             base_url = "https://www.lancers.jp/work/search"
-            url = f"{base_url}?keyword={search_query}&show_description=1&sort=started&work_rank[]=0&work_rank[]=2&work_rank[]=3"
-            if start_page > 1:
-                url += f"&page={start_page}"
+            url = (f"{base_url}?"
+                  f"sort=started&"
+                  f"open=1&"  # 募集中のみ
+                  f"show_description=1&"
+                  f"work_rank%5B%5D=3&"  # work_rank[]の代わりにwork_rank%5B%5Dを使用
+                  f"work_rank%5B%5D=2&"
+                  f"work_rank%5B%5D=0&"
+                  f"budget_from=&"
+                  f"budget_to=&"
+                  f"keyword={urllib.parse.quote(search_query)}&"
+                  f"not=")
+            
+            # 初期URLをログ出力
+            self.logger.info("=" * 50)
+            self.logger.info(f"初期アクセスURL: {url}")
+            self.logger.info("=" * 50)
+            
             await self.page.goto(url)
-            self.logger.info(f"検索ページにアクセスしました: {search_query} (ページ {start_page})")
+            await self.page.wait_for_load_state('networkidle')
+            await asyncio.sleep(2)  # 追加の待機時間
 
             results = []
-            current_page = start_page
+            current_page = 1  # 常に1から開始
 
-            while current_page <= self.max_pages:
-                # ページの読み込みを待機
-                await self.page.wait_for_load_state('networkidle')
-                await asyncio.sleep(2)  # 追加の待機時間
+            while True:
+                self.logger.info("=" * 50)
+                self.logger.info(f"現在のページ: {current_page}")
+                self.logger.info(f"現在のURL: {self.page.url}")
+                self.logger.info("=" * 50)
 
-                # ページのHTMLを確認（デバッグ用）
-                html_content = await self.page.content()
-                self.logger.info(f"ページのHTML長さ: {len(html_content)}文字")
-                self.logger.info(f"URLを確認: {self.page.url}")
-
-                # より一般的なセレクタで要素を探す
-                all_links = await self.page.query_selector_all('a')
-                self.logger.info(f"ページ内のリンク数: {len(all_links)}")
-                
-                # 案件リストを探す（複数のセレクタで試す）
-                selectors_to_try = [
-                    '.c-media-list__item',  # 元のセレクタ
-                    '.c-media',             # もう少し一般的なセレクタ
-                    '.p-work-list',         # 仕事リスト
-                    '.p-work-card',         # 仕事カード
-                    'article',              # 一般的な記事要素
-                    '.c-card'               # カード要素
-                ]
-                
-                work_cards = []  # デフォルトは空リスト
-                
-                for selector in selectors_to_try:
-                    elements = await self.page.query_selector_all(selector)
-                    self.logger.info(f"セレクタ '{selector}' の要素数: {len(elements)}")
-                    
-                    if len(elements) > 0:
-                        self.logger.info(f"有効なセレクタを発見: {selector}")
-                        # 最初のセレクタで見つかった要素で処理を続行
-                        work_cards = elements
-                        break
-                
+                # 案件情報の取得
+                work_cards = await self._get_work_cards()
                 for card in work_cards:
                     work_info = await self._extract_work_info(card)
                     if work_info:
@@ -234,12 +207,33 @@ class LancersBrowser:
 
                 self.logger.info(f"ページ {current_page} から{len(work_cards)}件の案件情報を取得しました")
 
-                # 次のページが存在し、最大ページ数に達していない場合は次のページへ
-                if current_page < self.max_pages and await self._has_next_page():
-                    if not await self._go_to_next_page():
-                        break
-                    current_page += 1
-                else:
+                if current_page >= self.max_pages:
+                    break
+
+                # 次のページへの移動
+                next_page = current_page + 1
+                next_url = (f"{base_url}?"
+                          f"sort=started&"
+                          f"open=1&"
+                          f"show_description=1&"
+                          f"work_rank%5B%5D=3&"
+                          f"work_rank%5B%5D=2&"
+                          f"work_rank%5B%5D=0&"
+                          f"budget_from=&"
+                          f"budget_to=&"
+                          f"keyword={urllib.parse.quote(search_query)}&"
+                          f"not=&"
+                          f"page={next_page}")  # ページ番号を追加
+
+                self.logger.info(f"次のページへ移動を試みます: {next_url}")
+                
+                try:
+                    await self.page.goto(next_url)
+                    await self.page.wait_for_load_state('networkidle')
+                    await asyncio.sleep(2)  # 追加の待機時間
+                    current_page = next_page
+                except Exception as e:
+                    self.logger.error(f"ページ遷移に失敗しました: {str(e)}")
                     break
 
             self.logger.info(f"合計 {len(results)} 件の案件情報を取得しました")
@@ -248,6 +242,93 @@ class LancersBrowser:
         except Exception as e:
             self.logger.error(f"検索処理中にエラーが発生しました: {str(e)}")
             raise
+
+    async def _get_work_cards(self) -> List:
+        """
+        ページから案件カードの要素を取得する
+        Returns:
+            List: 案件カードの要素のリスト
+        """
+        try:
+            await self.page.wait_for_load_state('networkidle')
+            await asyncio.sleep(2)
+
+            # 正しいセレクタを使用
+            work_cards = await self.page.query_selector_all('.p-search-job-media.c-media.c-media--item')
+            
+            if not work_cards:
+                self.logger.warning("案件カードが見つかりませんでした")
+                return []
+            
+            self.logger.info(f"検索結果から{len(work_cards)}件の案件を取得しました")
+            return work_cards
+
+        except Exception as e:
+            self.logger.error(f"案件カードの取得中にエラーが発生しました: {str(e)}")
+            return []
+
+    async def get_work_detail(self, work_id: str) -> Optional[Dict[str, Any]]:
+        """
+        案件の詳細情報を取得する
+        Args:
+            work_id (str): 案件ID
+        Returns:
+            Optional[Dict[str, Any]]: 案件の詳細情報
+        """
+        try:
+            url = f"https://www.lancers.jp/work/detail/{work_id}"
+            self.logger.info(f"案件詳細ページにアクセス: {url}")
+            
+            await self.page.goto(url)
+            await self.page.wait_for_load_state('networkidle')
+            await asyncio.sleep(2)  # 追加の待機時間
+
+            # 案件が存在しない場合や閲覧制限がある場合
+            if "閲覧制限" in await self.page.title():
+                self.logger.warning(f"案件 {work_id} は閲覧制限があります")
+                return None
+
+            # 基本情報の取得
+            title = await self._get_text('.p-work-detail-header__title')
+            
+            # 締め切り情報を取得
+            deadline = await self._get_text('.c-definitionList__description:has-text("募集期間")')
+
+            # 募集人数を取得
+            people = await self._get_text('.c-definitionList__description:has-text("募集人数")')
+
+            # 希望納期を取得
+            delivery_date = await self._get_text('.c-definitionList__description:has-text("希望納期")')
+
+            return {
+                'title': title,
+                'url': url,
+                'work_id': work_id,
+                'deadline': deadline,
+                'people': people,
+                'delivery_date': delivery_date
+            }
+
+        except Exception as e:
+            self.logger.error(f"案件詳細の取得中にエラーが発生しました: {str(e)}")
+            return None
+
+    async def _get_text(self, selector: str) -> str:
+        """
+        指定されたセレクタの要素からテキストを取得する
+        Args:
+            selector (str): CSSセレクタ
+        Returns:
+            str: 取得したテキスト
+        """
+        try:
+            element = await self.page.query_selector(selector)
+            if element:
+                text = await element.text_content()
+                return text.strip() if text else ""
+            return ""
+        except Exception:
+            return ""
 
     async def __aenter__(self):
         """非同期コンテキストマネージャーのエントリーポイント"""

@@ -27,15 +27,18 @@ def parse_arguments():
                       help='出力ファイル名（指定しない場合は自動生成）')
     parser.add_argument('--no-headless', action='store_true', default=False,
                       help='ヘッドレスモードを無効にする（デフォルト：有効）')
+    parser.add_argument('--with-details', action='store_true', default=False,
+                      help='案件詳細情報も取得する（デフォルト：無効）')
     return parser.parse_args()
 
-async def scrape_lancers(search_query: str, output_file: Optional[str] = None, headless: bool = True):
+async def scrape_lancers(search_query: str, output_file: Optional[str] = None, headless: bool = True, with_details: bool = False):
     """
     Lancersのスクレイピングを実行する
     Args:
         search_query (str): 検索クエリ
         output_file (Optional[str]): 出力ファイル名
         headless (bool): ヘッドレスモードで実行するかどうか
+        with_details (bool): 案件詳細情報も取得するかどうか
     """
     logger = setup_logging()
     logger.info(f"スクレイピングを開始します。検索クエリ: {search_query}")
@@ -54,17 +57,34 @@ async def scrape_lancers(search_query: str, output_file: Optional[str] = None, h
                 logger.warning("検索結果が見つかりませんでした")
                 return
 
-            # 結果のパース
-            parsed_results = parser.parse_results(raw_results)
-            if not parsed_results:
-                logger.warning("結果のパースに失敗しました")
-                return
-
-            # CSVファイルに保存
-            output_path = csv_handler.save_to_csv(parsed_results, output_file)
-            if output_path:
-                logger.info(f"スクレイピング結果を保存しました: {output_path}")
-                logger.info(f"取得した案件数: {len(parsed_results)}件")
+            # 案件詳細の取得
+            if with_details:
+                logger.info("案件詳細情報の取得を開始します")
+                detailed_results = []
+                for result in raw_results:
+                    work_id = parser.parse_work_id(result['url'])
+                    if work_id:
+                        detail = await browser.get_work_detail(work_id)
+                        if detail:
+                            parsed_detail = parser.parse_work_detail(detail)
+                            detailed_results.append(parsed_detail)
+                        else:
+                            logger.warning(f"案件 {work_id} の詳細情報を取得できませんでした")
+                
+                if detailed_results:
+                    # 詳細情報をCSVファイルに保存
+                    output_path = csv_handler.save_to_csv(detailed_results, output_file)
+                    if output_path:
+                        logger.info(f"詳細情報を保存しました: {output_path}")
+                        logger.info(f"取得した案件数: {len(detailed_results)}件")
+            else:
+                # 基本情報のみパースしてCSVファイルに保存
+                parsed_results = parser.parse_results(raw_results)
+                if parsed_results:
+                    output_path = csv_handler.save_to_csv(parsed_results, output_file)
+                    if output_path:
+                        logger.info(f"スクレイピング結果を保存しました: {output_path}")
+                        logger.info(f"取得した案件数: {len(parsed_results)}件")
 
     except Exception as e:
         logger.error(f"スクレイピング中にエラーが発生しました: {str(e)}")
@@ -80,7 +100,8 @@ async def main():
         await scrape_lancers(
             search_query=args.search_query,
             output_file=args.output,
-            headless=not args.no_headless
+            headless=not args.no_headless,
+            with_details=args.with_details
         )
 
     except KeyboardInterrupt:

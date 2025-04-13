@@ -82,6 +82,38 @@ class LancersParser:
             self.logger.error(f"募集人数の解析に失敗しました: {str(e)}")
             return people
 
+    def parse_work_detail(self, detail: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        案件詳細情報をパースする
+        Args:
+            detail (Dict[str, Any]): 案件詳細情報
+        Returns:
+            Dict[str, Any]: パース済みの案件詳細情報
+        """
+        try:
+            # 締切日時のパース
+            deadline = self.parse_deadline(detail.get('deadline', ''))
+            
+            # 募集人数のパース
+            people = self.parse_people(detail.get('people', ''))
+            
+            # 希望納期のパース
+            delivery_date = self.parse_delivery_date(detail.get('delivery_date', ''))
+
+            return {
+                'title': detail.get('title', ''),
+                'url': detail.get('url', ''),
+                'work_id': detail.get('work_id', ''),
+                'deadline': deadline,
+                'people': people,
+                'delivery_date': delivery_date,
+                'scraped_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+
+        except Exception as e:
+            self.logger.error(f"案件詳細情報のパースに失敗しました: {str(e)}")
+            return detail
+
     def parse_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         スクレイピング結果を解析・整形する
@@ -97,9 +129,10 @@ class LancersParser:
                     'title': result['title'],
                     'url': result['url'],
                     'work_id': self.parse_work_id(result['url']),
-                    'deadline': self.parse_deadline(result['deadline']),
-                    'delivery_date': self.parse_delivery_date(result['delivery_date']),
-                    'people': self.parse_people(result['people']),
+                    'price': result.get('price', '報酬未設定'),
+                    'type': result.get('type', '種別不明'),
+                    'deadline': self.parse_deadline(result.get('deadline', '')),
+                    'status': result.get('status', '状態不明'),
                     'scraped_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 parsed_results.append(parsed_result)
