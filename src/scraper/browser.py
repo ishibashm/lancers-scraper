@@ -281,6 +281,13 @@ class LancersBrowser:
             
             await self.page.goto(url)
             await self.page.wait_for_load_state('networkidle')
+            
+            # 特定の要素が表示されるまで待機（ページロード完了の確認）
+            try:
+                await self.page.wait_for_selector('h1', timeout=5000)
+            except Exception:
+                self.logger.warning("ページロード完了の確認に失敗しました。処理を続行します。")
+            
             await asyncio.sleep(2)  # 追加の待機時間
 
             # 案件が存在しない場合や閲覧制限がある場合
@@ -289,16 +296,49 @@ class LancersBrowser:
                 return None
 
             # 基本情報の取得
-            title = await self._get_text('.p-work-detail-header__title')
+            title = await self._get_text('h1') or await self._get_text('.p-work-detail-header__title')
             
-            # 締め切り情報を取得
-            deadline = await self._get_text('.c-definitionList__description:has-text("募集期間")')
-
-            # 募集人数を取得
-            people = await self._get_text('.c-definitionList__description:has-text("募集人数")')
-
-            # 希望納期を取得
-            delivery_date = await self._get_text('.c-definitionList__description:has-text("希望納期")')
+            # ページ全体のテキストを取得して正規表現で解析
+            page_text = await self.page.evaluate('document.body.innerText')
+            
+            # 複数の方法で情報を抽出
+            detail_info = {}
+            
+            # 1. CSSセレクタによる抽出（従来の方法）
+            deadline_selector = await self._get_text('.c-definitionList__description:has-text("募集期間")')
+            people_selector = await self._get_text('.c-definitionList__description:has-text("募集人数")')
+            delivery_date_selector = await self._get_text('.c-definitionList__description:has-text("希望納期")')
+            
+            detail_info['deadline_selector'] = deadline_selector
+            detail_info['people_selector'] = people_selector
+            detail_info['delivery_date_selector'] = delivery_date_selector
+            
+            # 2. 正規表現による抽出（ページテキスト全体から）
+            # 締切日時を抽出（例: 2025年04月21日 18:17）
+            deadline_match = re.search(r'締切[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{1,2})', page_text)
+            if deadline_match:
+                detail_info['deadline_regex'] = deadline_match.group(1)
+            
+            # 希望納期を抽出（例: 2025年05月16日）
+            delivery_date_match = re.search(r'希望納期[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日)', page_text)
+            if delivery_date_match:
+                detail_info['delivery_date_regex'] = delivery_date_match.group(1)
+            
+            # 募集期間を抽出（例: 5日間）
+            period_match = re.search(r'募集期間\s*(\d+)日間', page_text)
+            if period_match:
+                detail_info['period'] = period_match.group(1) + '日間'
+            
+            # 募集人数を抽出（例: 募集人数1人）
+            people_match = re.search(r'募集人数\s*(\d+)\s*人', page_text)
+            if people_match:
+                detail_info['people_regex'] = people_match.group(1) + '人'
+            
+            # 結果を統合（正規表現の結果を優先）
+            deadline = detail_info.get('deadline_regex', deadline_selector)
+            people = detail_info.get('people_regex', people_selector)
+            delivery_date = detail_info.get('delivery_date_regex', delivery_date_selector)
+            period = detail_info.get('period', '')
 
             return {
                 'title': title,
@@ -306,7 +346,9 @@ class LancersBrowser:
                 'work_id': work_id,
                 'deadline': deadline,
                 'people': people,
-                'delivery_date': delivery_date
+                'delivery_date': delivery_date,
+                'period': period,
+                'detail_info': detail_info  # デバッグ用（最終版では削除）
             }
 
         except Exception as e:
