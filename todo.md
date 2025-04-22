@@ -117,6 +117,21 @@
 - [x] プログレスバーの追加
 - [ ] 検索条件の拡張
 - [ ] データベース連携機能
+- [x] 新しいURLでのスクレイピング機能追加
+  - [x] 要件定義
+    - [x] 対象URL: https://www.lancers.jp/work/search/task/data?open=1&work_rank%5B%5D=3&work_rank%5B%5D=2&work_rank%5B%5D=1&work_rank%5B%5D=0&budget_from=&budget_to=&keyword=&not=
+    - [x] 対象URL: https://www.lancers.jp/work/search/task/data?type%5B%5D=project&open=1&work_rank%5B%5D=3&work_rank%5B%5D=2&work_rank%5B%5D=1&work_rank%5B%5D=0&budget_from=&budget_to=&keyword=&not=
+    - [ ] 必要なデータ項目の特定
+    - [ ] データ取得頻度とタイミングの定義
+  - [x] 技術選定
+    - [x] Playwrightを使用したブラウザ操作の継続
+    - [x] 既存のLancersBrowserクラスを拡張して新しい検索条件に対応
+    - [x] データパースには既存のLancersParserクラスを活用
+  - [x] ワークフロー
+    - [x] 新しい検索条件をconfig.pyに追加
+    - [x] main.pyに新しい検索条件でのスクレイピング処理を追加
+    - [x] 取得したデータを既存のCSV出力処理を利用して保存
+    - [ ] テストケースの追加と検証
 
 ## 環境設定
 - [x] requirements.txt
@@ -138,4 +153,5 @@
    - [x] クリーンアップスクリプト
 6. 追加機能の実装
    - [x] ページネーション対応
-   - [x] 並列処理の実装 
+   - [x] 並列処理の実装
+   - [x] 新しいURLでのスクレイピング機能の実装
