@@ -14,6 +14,7 @@ Lancersの案件情報を自動的にスクレイピングし、CSVファイル�
   - 募集状態
   - 締切情報
 - CSV形式でのデータ保存
+- タイトル列の余計な空白や改行を自動的にクリーニング
 - 環境変数による柔軟な設定
 - ヘッドレスモードでの実行対応
 - 詳細なログ出力
@@ -82,6 +83,9 @@ python src/main.py --data-search
 
 # プロジェクトデータ検索URLを使用してスクレイピング
 python src/main.py --data-search-project
+
+# 既存のCSVファイルをクリーニング
+python clean_existing_csv.py
 ```
 
 ### コマンドラインオプション

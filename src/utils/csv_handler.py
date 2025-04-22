@@ -33,6 +33,36 @@ class CSVHandler:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"{prefix}_{timestamp}.csv"
 
+    def clean_title(self, title: str) -> str:
+        """
+        タイトル文字列から余計な空白や改行を削除する
+        Args:
+            title (str): クリーニング対象のタイトル文字列
+        Returns:
+            str: クリーニング後のタイトル文字列
+        """
+        if title:
+            # 複数の空白や改行を単一の空白に置換し、前後の空白を削除
+            cleaned = " ".join(title.split())
+            return cleaned
+        return title
+
+    def clean_data(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        データのtitle列をクリーニングする
+        Args:
+            data (List[Dict[str, Any]]): クリーニング対象のデータ
+        Returns:
+            List[Dict[str, Any]]: クリーニング後のデータ
+        """
+        cleaned_data = []
+        for item in data:
+            cleaned_item = item.copy()
+            if 'title' in cleaned_item:
+                cleaned_item['title'] = self.clean_title(cleaned_item['title'])
+            cleaned_data.append(cleaned_item)
+        return cleaned_data
+
     def save_to_csv(self, data: List[Dict[str, Any]], filename: str = None) -> str:
         """
         データをCSVファイルに保存する
@@ -47,6 +77,9 @@ class CSVHandler:
                 self.logger.warning("保存するデータがありません")
                 return ""
 
+            # データをクリーニング
+            cleaned_data = self.clean_data(data)
+
             # ファイル名が指定されていない場合は生成する
             if not filename:
                 filename = self.generate_filename()
@@ -56,12 +89,12 @@ class CSVHandler:
             # CSVファイルの書き込み
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 # ヘッダーの取得（最初のデータのキーを使用）
-                fieldnames = list(data[0].keys())
+                fieldnames = list(cleaned_data[0].keys())
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 
                 # ヘッダーと内容の書き込み
                 writer.writeheader()
-                writer.writerows(data)
+                writer.writerows(cleaned_data)
 
             self.logger.info(f"CSVファイルを保存しました: {filepath}")
             return filepath
