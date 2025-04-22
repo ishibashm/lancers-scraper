@@ -76,14 +76,22 @@ python src/main.py --search-query "データ分析" --no-headless
 
 # 案件詳細情報も取得
 python src/main.py --search-query "動画編集" --with-details
+
+# データ検索URLを使用してスクレイピング
+python src/main.py --data-search
+
+# プロジェクトデータ検索URLを使用してスクレイピング
+python src/main.py --data-search-project
 ```
 
 ### コマンドラインオプション
 
-- `-q`, `--search-query`: 検索クエリ（必須）
+- `-q`, `--search-query`: 検索クエリ（オプション）
 - `-o`, `--output`: 出力ファイル名（オプション、指定しない場合は自動生成）
 - `--no-headless`: ブラウザを表示して実行（デフォルト：非表示）
 - `--with-details`: 案件詳細情報も取得（デフォルト：取得しない）
+- `--data-search`: データ検索URLを使用してスクレイピングを行う（デフォルト：無効）
+- `--data-search-project`: プロジェクトデータ検索URLを使用してスクレイピングを行う（デフォルト：無効）
 
 ## 設定
 

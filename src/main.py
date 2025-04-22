@@ -21,7 +21,7 @@ def setup_logging():
 def parse_arguments():
     """コマンドライン引数のパース"""
     parser = argparse.ArgumentParser(description='Lancersの案件情報をスクレイピングするツール')
-    parser.add_argument('--search-query', '-q', type=str, required=True,
+    parser.add_argument('--search-query', '-q', type=str, default=None,
                       help='検索クエリ（例：Python, Web開発）')
     parser.add_argument('--output', '-o', type=str, default=None,
                       help='出力ファイル名（指定しない場合は自動生成）')
@@ -29,19 +29,30 @@ def parse_arguments():
                       help='ヘッドレスモードを無効にする（デフォルト：有効）')
     parser.add_argument('--with-details', action='store_true', default=False,
                       help='案件詳細情報も取得する（デフォルト：無効）')
+    parser.add_argument('--data-search', action='store_true', default=False,
+                      help='データ検索URLを使用してスクレイピングを行う（デフォルト：無効）')
+    parser.add_argument('--data-search-project', action='store_true', default=False,
+                      help='プロジェクトデータ検索URLを使用してスクレイピングを行う（デフォルト：無効）')
     return parser.parse_args()
 
-async def scrape_lancers(search_query: str, output_file: Optional[str] = None, headless: bool = True, with_details: bool = False):
+async def scrape_lancers(search_query: Optional[str] = None, output_file: Optional[str] = None, headless: bool = True, with_details: bool = False, data_search: bool = False, data_search_project: bool = False):
     """
     Lancersのスクレイピングを実行する
     Args:
-        search_query (str): 検索クエリ
+        search_query (Optional[str]): 検索クエリ
         output_file (Optional[str]): 出力ファイル名
         headless (bool): ヘッドレスモードで実行するかどうか
         with_details (bool): 案件詳細情報も取得するかどうか
+        data_search (bool): データ検索URLを使用するかどうか
+        data_search_project (bool): プロジェクトデータ検索URLを使用するかどうか
     """
     logger = setup_logging()
-    logger.info(f"スクレイピングを開始します。検索クエリ: {search_query}")
+    if data_search:
+        logger.info("データ検索URLを使用してスクレイピングを開始します")
+    elif data_search_project:
+        logger.info("プロジェクトデータ検索URLを使用してスクレイピングを開始します")
+    else:
+        logger.info(f"スクレイピングを開始します。検索クエリ: {search_query}")
 
     try:
         # 各コンポーネントの初期化
@@ -52,7 +63,15 @@ async def scrape_lancers(search_query: str, output_file: Optional[str] = None, h
         # ブラウザでスクレイピングを実行
         async with browser:
             # 検索実行と結果取得
-            raw_results = await browser.search_short_videos(search_query)
+            if data_search:
+                raw_results = await browser.search_with_data_url()
+            elif data_search_project:
+                raw_results = await browser.search_with_data_project_url()
+            else:
+                if search_query is None:
+                    logger.error("検索クエリが指定されていません")
+                    return
+                raw_results = await browser.search_short_videos(search_query)
             if not raw_results:
                 logger.warning("検索結果が見つかりませんでした")
                 return
@@ -101,7 +120,9 @@ async def main():
             search_query=args.search_query,
             output_file=args.output,
             headless=not args.no_headless,
-            with_details=args.with_details
+            with_details=args.with_details,
+            data_search=args.data_search,
+            data_search_project=args.data_search_project
         )
 
     except KeyboardInterrupt:

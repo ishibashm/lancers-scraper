@@ -119,29 +119,21 @@
 - [x] プログレスバーの追加
 - [ ] 検索条件の拡張
 - [ ] データベース連携機能
-- [x] 詳細情報抽出機能の強化
-  - [x] 案件URLからのIDパース機能改善（/work/detail/[数字]のパターン）
-  - [x] CSSセレクタからページテキスト全体の検索方式への移行
-  - [x] 募集情報セクションのレイアウト解析と抽出方法の改善
-  - [x] 複数の情報抽出方法の実装（セレクタ + 正規表現の組み合わせ）
-
-- [x] get_work_detail関数の拡張
-  - [x] ページ全体のテキスト解析による情報抽出実装（document.body.innerText）
-  - [x] 募集人数の正規表現パターン改善（「募集人数1人」形式に対応）
-  - [x] 実行時エラーのリトライ機能強化
-  - [x] ページロード完了検出の強化（networkidle → waitForSelector併用）
-
-- [x] parser.pyの改善
-  - [x] 日付フォーマットの標準化機能（YYYY-MM-DD形式への変換）
-  - [x] 募集人数の数値抽出強化（数字のみを取り出す）
-  - [x] 複数の正規表現パターンによる多様な形式への対応
-  - [x] 詳細テキストからの構造化情報抽出機能
-
-- [x] テスト追加
-  - [x] 詳細ページの解析テスト（parse_work_detail）
-  - [x] 様々な日付形式パターンのユニットテスト
-  - [x] 募集人数抽出パターンテスト
-  - [x] エラー処理テスト
+- [x] 新しいURLでのスクレイピング機能追加
+  - [x] 要件定義
+    - [x] 対象URL: https://www.lancers.jp/work/search/task/data?open=1&work_rank%5B%5D=3&work_rank%5B%5D=2&work_rank%5B%5D=1&work_rank%5B%5D=0&budget_from=&budget_to=&keyword=&not=
+    - [x] 対象URL: https://www.lancers.jp/work/search/task/data?type%5B%5D=project&open=1&work_rank%5B%5D=3&work_rank%5B%5D=2&work_rank%5B%5D=1&work_rank%5B%5D=0&budget_from=&budget_to=&keyword=&not=
+    - [ ] 必要なデータ項目の特定
+    - [ ] データ取得頻度とタイミングの定義
+  - [x] 技術選定
+    - [x] Playwrightを使用したブラウザ操作の継続
+    - [x] 既存のLancersBrowserクラスを拡張して新しい検索条件に対応
+    - [x] データパースには既存のLancersParserクラスを活用
+  - [x] ワークフロー
+    - [x] 新しい検索条件をconfig.pyに追加
+    - [x] main.pyに新しい検索条件でのスクレイピング処理を追加
+    - [x] 取得したデータを既存のCSV出力処理を利用して保存
+    - [ ] テストケースの追加と検証
 
 ## 環境設定
 - [x] requirements.txt
@@ -164,121 +156,4 @@
 6. ~~追加機能の実装~~ ✓
    - [x] ページネーション対応
    - [x] 並列処理の実装
-   - [x] 詳細情報抽出機能の強化
-7. 今後の課題
-   - [ ] 詳細ページの情報抽出改善
-     - [ ] p.p-work-detail-scheduleクラスを利用した締切日時抽出
-     - [ ] p.p-work-detail-scheduleクラスを利用した希望納期抽出
-     - [ ] 抽出結果の優先順位付け（セレクタ間の優先順位設定）
-     - [ ] 複雑な日付形式への対応強化
-     - [ ] 実装方法
-       ```python
-       # browser.py - get_work_detail関数内に追加
-       # p-work-detail-scheduleクラスを利用した抽出を追加
-       schedule_elements = await self.page.query_selector_all('.p-work-detail-schedule')
-       for element in schedule_elements:
-           element_text = await element.text_content()
-           if "締切" in element_text:
-               deadline_match = re.search(r'締切[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{1,2})', element_text)
-               if deadline_match:
-                   detail_info['deadline_schedule'] = deadline_match.group(1)
-           if "希望納期" in element_text:
-               delivery_date_match = re.search(r'希望納期[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日)', element_text)
-               if delivery_date_match:
-                   detail_info['delivery_date_schedule'] = delivery_date_match.group(1)
-       
-       # 結果を統合（優先順位: p-work-detail-schedule > 正規表現 > セレクタ）
-       deadline = detail_info.get('deadline_schedule', 
-                 detail_info.get('deadline_regex', deadline_selector))
-       delivery_date = detail_info.get('delivery_date_schedule', 
-                      detail_info.get('delivery_date_regex', delivery_date_selector))
-       ```
-   - [ ] 締切日時のフォーマット調整
-     - [ ] 締切日時から時間部分を除去（日付のみを返す）
-     - [ ] 実装方法
-       ```python
-       # parser.py - format_dateメソッドの修正
-       def format_date(self, date_str: str, include_time: bool = False) -> str:
-           """
-           日本語の日付形式を標準形式（YYYY-MM-DD）に変換
-           Args:
-               date_str (str): 変換する日付文字列（例：2025年04月21日 18:17）
-               include_time (bool): 時間部分を含めるかどうか
-           Returns:
-               str: 変換後の日付文字列
-           """
-           try:
-               if not date_str:
-                   return ""
-                   
-               # 年月日の抽出
-               date_match = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', date_str)
-               if not date_match:
-                   return date_str
-                   
-               year = date_match.group(1)
-               month = date_match.group(2).zfill(2)  # 1桁の場合は0埋め
-               day = date_match.group(3).zfill(2)    # 1桁の場合は0埋め
-               
-               # 時刻部分は要求された場合のみ追加
-               if include_time:
-                   time_match = re.search(r'(\d{1,2}):(\d{1,2})', date_str)
-                   if time_match:
-                       hour = time_match.group(1).zfill(2)
-                       minute = time_match.group(2).zfill(2)
-                       return f"{year}-{month}-{day} {hour}:{minute}"
-               
-               return f"{year}-{month}-{day}"
-           except Exception as e:
-               self.logger.error(f"日付形式の変換に失敗しました: {str(e)}")
-               return date_str
-               
-       # parse_work_detailメソッド内での使用
-       # 締切日時のパース（時間なし）
-       deadline_raw = detail.get('deadline', '')
-       deadline = self.parse_deadline(deadline_raw)
-       deadline_formatted = self.format_date(deadline, include_time=False)
-       
-       # 希望納期のパース（元々時間なし）
-       delivery_date_raw = detail.get('delivery_date', '')
-       delivery_date = self.parse_delivery_date(delivery_date_raw)
-       delivery_date_formatted = self.format_date(delivery_date)
-       ```
-   - [ ] 案件タイトルの加工機能
-     - [ ] タイトルからカテゴリー部分の削除（例：[芸能・エンターテイメント]）
-     - [ ] 実装方法
-       ```python
-       # parser.py - parse_work_detailメソッド内に追加
-       def clean_title(self, title: str) -> str:
-           """
-           案件タイトルからカテゴリー部分を削除する
-           例：'TikTokショートドラマ脚本家募集の仕事 [芸能・エンターテイメント]' 
-              → 'TikTokショートドラマ脚本家募集の仕事'
-           Args:
-               title (str): 元のタイトル
-           Returns:
-               str: 加工後のタイトル
-           """
-           try:
-               # 角括弧で囲まれたカテゴリー部分を削除
-               cleaned_title = re.sub(r'\s*\[.*?\]\s*$', '', title)
-               return cleaned_title.strip()
-           except Exception as e:
-               self.logger.error(f"タイトルの加工に失敗しました: {str(e)}")
-               return title
-               
-       # 使用例
-       title = detail.get('title', '')
-       cleaned_title = self.clean_title(title)
-       
-       return {
-           'title': cleaned_title,
-           'title_raw': title,
-           # 他のフィールド...
-       }
-       ```
-   - [ ] 検索条件の拡張機能
-   - [ ] データベース連携機能
-   - [ ] 開発環境のセットアップスクリプト作成
-   - [ ] CI/CD環境の構築
-   - [ ] Dockerファイルの作成 
+   - [x] 新しいURLでのスクレイピング機能の実装

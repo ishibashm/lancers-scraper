@@ -38,6 +38,8 @@ class Config:
             'ITEMS_PER_PAGE': int(os.getenv('ITEMS_PER_PAGE', '20')),
             'BASE_URL': 'https://www.lancers.jp',
             'SEARCH_URL': 'https://www.lancers.jp/work/search',
+            'SEARCH_URL_DATA': 'https://www.lancers.jp/work/search/task/data?open=1&work_rank%5B%5D=3&work_rank%5B%5D=2&work_rank%5B%5D=1&work_rank%5B%5D=0&budget_from=&budget_to=&keyword=&not=',
+            'SEARCH_URL_DATA_PROJECT': 'https://www.lancers.jp/work/search/task/data?type%5B%5D=project&open=1&work_rank%5B%5D=3&work_rank%5B%5D=2&work_rank%5B%5D=1&work_rank%5B%5D=0&budget_from=&budget_to=&keyword=&not=',
 
             # ファイル設定
             'CSV_ENCODING': 'utf-8',
@@ -113,5 +115,3 @@ class Config:
     def browser_timeout(self) -> int:
         """ブラウザのタイムアウト時間を取得する"""
         return self.config['BROWSER_TIMEOUT']
-
- 

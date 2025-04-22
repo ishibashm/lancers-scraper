@@ -166,13 +166,16 @@ class LancersBrowser:
 
     async def search_short_videos(self, search_query: str, start_page: int = 1) -> List[Dict[str, Any]]:
         try:
-            # 正しいURL形式で構築
             base_url = "https://www.lancers.jp/work/search"
+            results = []
+            current_page = 1
+
+            # 初期URLを構築
             url = (f"{base_url}?"
                   f"sort=started&"
-                  f"open=1&"  # 募集中のみ
+                  f"open=1&"
                   f"show_description=1&"
-                  f"work_rank%5B%5D=3&"  # work_rank[]の代わりにwork_rank%5B%5Dを使用
+                  f"work_rank%5B%5D=3&"
                   f"work_rank%5B%5D=2&"
                   f"work_rank%5B%5D=0&"
                   f"budget_from=&"
@@ -180,9 +183,79 @@ class LancersBrowser:
                   f"keyword={urllib.parse.quote(search_query)}&"
                   f"not=")
             
+            await self.page.goto(url)
+            await self.page.wait_for_load_state('networkidle')
+            await asyncio.sleep(2)
+
+            # 総件数を取得
+            total_count_elem = await self.page.query_selector('.p-search-job-count__number')
+            total_count = 0
+            if total_count_elem:
+                count_text = await total_count_elem.text_content()
+                try:
+                    total_count = int(re.search(r'\d+', count_text).group())
+                    self.logger.info(f"総件数: {total_count}件")
+                except (AttributeError, ValueError):
+                    self.logger.warning("総件数の取得に失敗しました")
+
+            while True:
+                self.logger.info(f"ページ {current_page} を処理中...")
+
+                # 案件カードを取得
+                work_cards = await self._get_work_cards()
+                for card in work_cards:
+                    work_info = await self._extract_work_info(card)
+                    if work_info:
+                        results.append(work_info)
+
+                self.logger.info(f"ページ {current_page} から{len(work_cards)}件の案件情報を取得しました")
+
+                # 次のページの有無を確認
+                next_button = await self.page.query_selector('a.c-pagination__next:not(.is-disabled)')
+                if not next_button or current_page >= self.max_pages:
+                    break
+
+                # 次のページへ移動
+                next_page = current_page + 1
+                next_url = (f"{base_url}?"
+                          f"sort=started&"
+                          f"open=1&"
+                          f"show_description=1&"
+                          f"work_rank%5B%5D=3&"
+                          f"work_rank%5B%5D=2&"
+                          f"work_rank%5B%5D=0&"
+                          f"budget_from=&"
+                          f"budget_to=&"
+                          f"keyword={urllib.parse.quote(search_query)}&"
+                          f"not=&"
+                          f"page={next_page}")  # ページ番号を追加
+
+                self.logger.info(f"次のページへ移動を試みます: {next_url}")
+                
+                try:
+                    await self.page.goto(next_url)
+                    await self.page.wait_for_load_state('networkidle')
+                    await asyncio.sleep(2)
+                    current_page = next_page
+                except Exception as e:
+                    self.logger.error(f"ページ遷移に失敗しました: {str(e)}")
+                    break
+
+            self.logger.info(f"合計 {len(results)} 件の案件情報を取得しました（総件数: {total_count}件）")
+            return results
+
+        except Exception as e:
+            self.logger.error(f"検索処理中にエラーが発生しました: {str(e)}")
+            raise
+
+    async def search_with_data_url(self, start_page: int = 1) -> List[Dict[str, Any]]:
+        try:
+            # データ検索URLを使用
+            url = "https://www.lancers.jp/work/search/task/data?open=1&work_rank%5B%5D=3&work_rank%5B%5D=2&work_rank%5B%5D=1&work_rank%5B%5D=0&budget_from=&budget_to=&keyword=&not="
+            
             # 初期URLをログ出力
             self.logger.info("=" * 50)
-            self.logger.info(f"初期アクセスURL: {url}")
+            self.logger.info(f"データ検索初期アクセスURL: {url}")
             self.logger.info("=" * 50)
             
             await self.page.goto(url)
@@ -212,18 +285,7 @@ class LancersBrowser:
 
                 # 次のページへの移動
                 next_page = current_page + 1
-                next_url = (f"{base_url}?"
-                          f"sort=started&"
-                          f"open=1&"
-                          f"show_description=1&"
-                          f"work_rank%5B%5D=3&"
-                          f"work_rank%5B%5D=2&"
-                          f"work_rank%5B%5D=0&"
-                          f"budget_from=&"
-                          f"budget_to=&"
-                          f"keyword={urllib.parse.quote(search_query)}&"
-                          f"not=&"
-                          f"page={next_page}")  # ページ番号を追加
+                next_url = f"{url}&page={next_page}"  # ページ番号を追加
 
                 self.logger.info(f"次のページへ移動を試みます: {next_url}")
                 
@@ -240,7 +302,64 @@ class LancersBrowser:
             return results
 
         except Exception as e:
-            self.logger.error(f"検索処理中にエラーが発生しました: {str(e)}")
+            self.logger.error(f"データ検索処理中にエラーが発生しました: {str(e)}")
+            raise
+
+    async def search_with_data_project_url(self, start_page: int = 1) -> List[Dict[str, Any]]:
+        try:
+            # プロジェクトデータ検索URLを使用
+            url = "https://www.lancers.jp/work/search/task/data?type%5B%5D=project&open=1&work_rank%5B%5D=3&work_rank%5B%5D=2&work_rank%5B%5D=1&work_rank%5B%5D=0&budget_from=&budget_to=&keyword=&not="
+            
+            # 初期URLをログ出力
+            self.logger.info("=" * 50)
+            self.logger.info(f"プロジェクトデータ検索初期アクセスURL: {url}")
+            self.logger.info("=" * 50)
+            
+            await self.page.goto(url)
+            await self.page.wait_for_load_state('networkidle')
+            await asyncio.sleep(2)  # 追加の待機時間
+
+            results = []
+            current_page = 1  # 常に1から開始
+
+            while True:
+                self.logger.info("=" * 50)
+                self.logger.info(f"現在のページ: {current_page}")
+                self.logger.info(f"現在のURL: {self.page.url}")
+                self.logger.info("=" * 50)
+
+                # 案件情報の取得
+                work_cards = await self._get_work_cards()
+                for card in work_cards:
+                    work_info = await self._extract_work_info(card)
+                    if work_info:
+                        results.append(work_info)
+
+                self.logger.info(f"ページ {current_page} から{len(work_cards)}件の案件情報を取得しました")
+
+                if current_page >= self.max_pages:
+                    break
+
+                # 次のページへの移動
+                next_page = current_page + 1
+                next_url = f"{url}&page={next_page}"  # ページ番号を追加
+
+                self.logger.info(f"次のページへ移動を試みます: {next_url}")
+                
+                try:
+                    await self.page.goto(next_url)
+                    await self.page.wait_for_load_state('networkidle')
+                    await asyncio.sleep(2)  # 追加の待機時間
+                    current_page = next_page
+                except Exception as e:
+                    self.logger.error(f"ページ遷移に失敗しました: {str(e)}")
+                    break
+
+            self.logger.info(f"合計 {len(results)} 件の案件情報を取得しました")
+            return results
+
+        except Exception as e:
+            self.logger.error(f"プロジェクトデータ検索処理中にエラーが発生しました: {str(e)}")
             raise
 
     async def _get_work_cards(self) -> List:
@@ -253,9 +372,17 @@ class LancersBrowser:
             await self.page.wait_for_load_state('networkidle')
             await asyncio.sleep(2)
 
-            # 正しいセレクタを使用
-            work_cards = await self.page.query_selector_all('.p-search-job-media.c-media.c-media--item')
+            # より包括的なセレクタを使用
+            selectors = [
+                'div.p-search-job-media',  # 通常の案件カード
+                'div[data-external-modal]'  # 外部リンクの案件カード
+            ]
             
+            work_cards = []
+            for selector in selectors:
+                cards = await self.page.query_selector_all(selector)
+                work_cards.extend(cards)
+
             if not work_cards:
                 self.logger.warning("案件カードが見つかりませんでした")
                 return []
@@ -379,4 +506,4 @@ class LancersBrowser:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """非同期コンテキストマネージャーの終了処理"""
-        await self.close() 
+        await self.close()
