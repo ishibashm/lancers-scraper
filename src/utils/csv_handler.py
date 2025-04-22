@@ -155,3 +155,58 @@ class CSVHandler:
         except Exception as e:
             self.logger.error(f"CSVファイルの読み込みに失敗しました: {str(e)}")
             return []
+
+    def extract_urls(self, filepath: str, url_column: str = 'url') -> List[str]:
+        """
+        CSVファイルから指定した列のURLを抽出する
+        Args:
+            filepath (str): 読み込むファイルのパス
+            url_column (str): URLが記載されている列名（デフォルトは 'url'）
+        Returns:
+            List[str]: 抽出したURLのリスト
+        """
+        try:
+            data = self.read_csv(filepath)
+            urls = [row[url_column] for row in data if url_column in row and row[url_column]]
+            self.logger.info(f"CSVファイルからURLを抽出しました: {filepath}, 件数: {len(urls)}")
+            return urls
+
+        except Exception as e:
+            self.logger.error(f"URLの抽出に失敗しました: {str(e)}")
+            return []
+
+    def save_scraped_data(self, data: List[Dict[str, Any]], original_filepath: str) -> str:
+        """
+        スクレイピングしたデータを新しいCSVファイルに保存する
+        Args:
+            data (List[Dict[str, Any]]): 保存するスクレイピングデータ
+            original_filepath (str): 元のCSVファイルのパス（ファイル名生成に使用）
+        Returns:
+            str: 保存したファイルのパス
+        """
+        try:
+            if not data:
+                self.logger.warning("保存するデータがありません")
+                return ""
+
+            # ファイル名を生成（元のファイル名に '_scraped' を追加）
+            base_name = os.path.splitext(os.path.basename(original_filepath))[0]
+            filename = f"{base_name}_scraped.csv"
+            filepath = os.path.join(self.output_dir, filename)
+            
+            # CSVファイルの書き込み
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                # ヘッダーの取得（最初のデータのキーを使用）
+                fieldnames = list(data[0].keys())
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                
+                # ヘッダーと内容の書き込み
+                writer.writeheader()
+                writer.writerows(data)
+
+            self.logger.info(f"スクレイピングデータをCSVファイルに保存しました: {filepath}")
+            return filepath
+
+        except Exception as e:
+            self.logger.error(f"スクレイピングデータの保存に失敗しました: {str(e)}")
+            raise

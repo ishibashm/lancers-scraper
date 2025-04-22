@@ -183,6 +183,17 @@ class LancersBrowser:
                   f"keyword={urllib.parse.quote(search_query)}&"
                   f"not=")
             
+            # 環境変数を読み込む
+            from dotenv import load_dotenv
+            import os
+            load_dotenv()
+            username = os.getenv("LANCERS_USERNAME", "")
+            password = os.getenv("LANCERS_PASSWORD", "")
+            if username and password:
+                await self.login_if_needed(url, username, password)
+            else:
+                self.logger.warning("ログイン情報が設定されていません。環境変数 LANCERS_USERNAME と LANCERS_PASSWORD を設定してください。")
+            
             await self.page.goto(url)
             await self.page.wait_for_load_state('networkidle')
             await asyncio.sleep(2)
@@ -258,6 +269,17 @@ class LancersBrowser:
             self.logger.info(f"データ検索初期アクセスURL: {url}")
             self.logger.info("=" * 50)
             
+            # 環境変数を読み込む
+            from dotenv import load_dotenv
+            import os
+            load_dotenv()
+            username = os.getenv("LANCERS_USERNAME", "")
+            password = os.getenv("LANCERS_PASSWORD", "")
+            if username and password:
+                await self.login_if_needed(url, username, password)
+            else:
+                self.logger.warning("ログイン情報が設定されていません。環境変数 LANCERS_USERNAME と LANCERS_PASSWORD を設定してください。")
+            
             await self.page.goto(url)
             await self.page.wait_for_load_state('networkidle')
             await asyncio.sleep(2)  # 追加の待機時間
@@ -314,6 +336,17 @@ class LancersBrowser:
             self.logger.info("=" * 50)
             self.logger.info(f"プロジェクトデータ検索初期アクセスURL: {url}")
             self.logger.info("=" * 50)
+            
+            # 環境変数を読み込む
+            from dotenv import load_dotenv
+            import os
+            load_dotenv()
+            username = os.getenv("LANCERS_USERNAME", "")
+            password = os.getenv("LANCERS_PASSWORD", "")
+            if username and password:
+                await self.login_if_needed(url, username, password)
+            else:
+                self.logger.warning("ログイン情報が設定されていません。環境変数 LANCERS_USERNAME と LANCERS_PASSWORD を設定してください。")
             
             await self.page.goto(url)
             await self.page.wait_for_load_state('networkidle')
@@ -482,6 +515,108 @@ class LancersBrowser:
             self.logger.error(f"案件詳細の取得中にエラーが発生しました: {str(e)}")
             return None
 
+    async def get_work_detail_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        """
+        URLから案件の詳細情報を取得する
+        Args:
+            url (str): 案件のURL
+        Returns:
+            Optional[Dict[str, Any]]: 案件の詳細情報
+        """
+        try:
+            self.logger.info(f"案件詳細ページにアクセス: {url}")
+            
+            # 環境変数を読み込む
+            from dotenv import load_dotenv
+            import os
+            load_dotenv()
+            username = os.getenv("LANCERS_USERNAME", "")
+            password = os.getenv("LANCERS_PASSWORD", "")
+            if username and password:
+                await self.login_if_needed(url, username, password)
+            else:
+                self.logger.warning("ログイン情報が設定されていません。環境変数 LANCERS_USERNAME と LANCERS_PASSWORD を設定してください。")
+            
+            await self.page.goto(url)
+            await self.page.wait_for_load_state('networkidle')
+            
+            # 特定の要素が表示されるまで待機（ページロード完了の確認）
+            try:
+                await self.page.wait_for_selector('h1', timeout=5000)
+            except Exception:
+                self.logger.warning("ページロード完了の確認に失敗しました。処理を続行します。")
+            
+            await asyncio.sleep(2)  # 追加の待機時間
+
+            # 案件が存在しない場合や閲覧制限がある場合
+            if "閲覧制限" in await self.page.title():
+                self.logger.warning(f"案件 {url} は閲覧制限があります")
+                return None
+
+            # 基本情報の取得
+            title = await self._get_text('h1') or await self._get_text('.p-work-detail-header__title')
+            
+            # ページ全体のテキストを取得して正規表現で解析
+            page_text = await self.page.evaluate('document.body.innerText')
+            
+            # 複数の方法で情報を抽出
+            detail_info = {}
+            
+            # 1. CSSセレクタによる抽出（従来の方法）
+            deadline_selector = await self._get_text('.c-definitionList__description:has-text("募集期間")')
+            people_selector = await self._get_text('.c-definitionList__description:has-text("募集人数")')
+            delivery_date_selector = await self._get_text('.c-definitionList__description:has-text("希望納期")')
+            
+            detail_info['deadline_selector'] = deadline_selector
+            detail_info['people_selector'] = people_selector
+            detail_info['delivery_date_selector'] = delivery_date_selector
+            
+            # 2. 正規表現による抽出（ページテキスト全体から）
+            # 締切日時を抽出（例: 2025年04月21日 18:17）
+            deadline_match = re.search(r'締切[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{1,2})', page_text)
+            if deadline_match:
+                detail_info['deadline_regex'] = deadline_match.group(1)
+            
+            # 希望納期を抽出（例: 2025年05月16日）
+            delivery_date_match = re.search(r'希望納期[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日)', page_text)
+            if delivery_date_match:
+                detail_info['delivery_date_regex'] = delivery_date_match.group(1)
+            
+            # 募集期間を抽出（例: 5日間）
+            period_match = re.search(r'募集期間\s*(\d+)日間', page_text)
+            if period_match:
+                detail_info['period'] = period_match.group(1) + '日間'
+            
+            # 募集人数を抽出（例: 募集人数1人）
+            people_match = re.search(r'募集人数\s*(\d+)\s*人', page_text)
+            if people_match:
+                detail_info['people_regex'] = people_match.group(1) + '人'
+            
+            # 結果を統合（正規表現の結果を優先）
+            deadline = detail_info.get('deadline_regex', deadline_selector)
+            people = detail_info.get('people_regex', people_selector)
+            delivery_date = detail_info.get('delivery_date_regex', delivery_date_selector)
+            period = detail_info.get('period', '')
+
+            # URLからwork_idを抽出
+            work_id_match = re.search(r'/work/detail/(\d+)', url)
+            work_id = work_id_match.group(1) if work_id_match else "不明"
+
+            return {
+                'title': title,
+                'url': url,
+                'work_id': work_id,
+                'deadline': deadline,
+                'people': people,
+                'delivery_date': delivery_date,
+                'period': period,
+                'detail_info': detail_info  # デバッグ用（最終版では削除）
+            }
+
+        except Exception as e:
+            self.logger.error(f"案件詳細の取得中にエラーが発生しました: {str(e)}")
+            return None
+
     async def _get_text(self, selector: str) -> str:
         """
         指定されたセレクタの要素からテキストを取得する
@@ -498,6 +633,87 @@ class LancersBrowser:
             return ""
         except Exception:
             return ""
+
+    async def check_page_type(self, url: str) -> str:
+        """
+        指定したURLのページタイプ（会員/非会員）を判定する
+        Args:
+            url (str): 判定対象のURL
+        Returns:
+            str: ページタイプ ('member' または 'non-member')
+        """
+        try:
+            # 新しいブラウザコンテキストを使用してキャッシュの影響を排除
+            context = await self.browser.new_context()
+            page = await context.new_page()
+            self.logger.info(f"ページタイプ判定のためURLにアクセス: {url}")
+            
+            await page.goto(url)
+            await page.wait_for_load_state('networkidle')
+            await asyncio.sleep(2)
+
+            # 会員ページかどうかを判定（特定のログイン要素の存在をチェック）
+            login_element = await page.query_selector('.login-button, .user-profile, #login, [class*="login"], [id*="login"], [class*="user"], [id*="user"]')
+            page_type = 'member' if login_element else 'non-member'
+            
+            self.logger.info(f"ページタイプ判定結果: {page_type} for URL: {url}")
+            await page.close()
+            await context.close()
+            return page_type
+
+        except Exception as e:
+            self.logger.error(f"ページタイプの判定に失敗しました: {str(e)}")
+            return 'unknown'
+
+    async def login_if_needed(self, url: str, username: str, password: str) -> bool:
+        """
+        会員ページの場合、ログイン処理を実行する
+        Args:
+            url (str): アクセスするURL
+            username (str): ログイン用のユーザー名
+            password (str): ログイン用のパスワード
+        Returns:
+            bool: ログインが成功したかどうか
+        """
+        try:
+            page_type = await self.check_page_type(url)
+            if page_type == 'member':
+                self.logger.info(f"会員ページのためログイン処理を開始: {url}")
+                context = await self.browser.new_context()
+                page = await context.new_page()
+                
+                await page.goto("https://www.lancers.jp/user/login")
+                await page.wait_for_load_state('networkidle')
+                await asyncio.sleep(2)
+                
+                # ログイン情報を入力
+                await page.fill('input[name="username"]', username)
+                await page.fill('input[name="password"]', password)
+                
+                # ログインボタンをクリック
+                await page.click('button[type="submit"]')
+                await page.wait_for_load_state('networkidle')
+                await asyncio.sleep(3)
+                
+                # ログイン成功を確認
+                if "マイページ" in await page.title() or await page.query_selector('.user-profile'):
+                    self.logger.info("ログインに成功しました")
+                    await page.goto(url)
+                    await page.wait_for_load_state('networkidle')
+                    await asyncio.sleep(2)
+                    return True
+                else:
+                    self.logger.error("ログインに失敗しました")
+                    await page.close()
+                    await context.close()
+                    return False
+            else:
+                self.logger.info(f"非会員ページのためログイン不要: {url}")
+                return True
+
+        except Exception as e:
+            self.logger.error(f"ログイン処理中にエラーが発生しました: {str(e)}")
+            return False
 
     async def __aenter__(self):
         """非同期コンテキストマネージャーのエントリーポイント"""

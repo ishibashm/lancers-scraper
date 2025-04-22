@@ -84,6 +84,15 @@ python src/main.py --data-search
 # プロジェクトデータ検索URLを使用してスクレイピング
 python src/main.py --data-search-project
 
+# CSVファイルからURLを抽出
+python src/main.py --extract-urls "path/to/your/csvfile.csv"
+
+# 抽出したURLをファイルに保存
+python src/main.py --extract-urls "path/to/your/csvfile.csv" --url-output "extracted_urls.txt"
+
+# CSVファイルからURLを抽出し、スクレイピング
+python src/main.py --scrape-urls "path/to/your/csvfile.csv"
+
 # 既存のCSVファイルをクリーニング
 python clean_existing_csv.py
 ```
@@ -96,6 +105,9 @@ python clean_existing_csv.py
 - `--with-details`: 案件詳細情報も取得（デフォルト：取得しない）
 - `--data-search`: データ検索URLを使用してスクレイピングを行う（デフォルト：無効）
 - `--data-search-project`: プロジェクトデータ検索URLを使用してスクレイピングを行う（デフォルト：無効）
+- `--extract-urls`: CSVファイルからURLを抽出する（CSVファイルのパスを指定）
+- `--url-output`: 抽出したURLの出力ファイル名（指定しない場合はコンソールに出力）
+- `--scrape-urls`: CSVファイルからURLを抽出し、スクレイピングする（CSVファイルのパスを指定）
 
 ## 設定
 
