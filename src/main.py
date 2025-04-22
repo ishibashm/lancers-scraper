@@ -33,6 +33,12 @@ def parse_arguments():
                       help='データ検索URLを使用してスクレイピングを行う（デフォルト：無効）')
     parser.add_argument('--data-search-project', action='store_true', default=False,
                       help='プロジェクトデータ検索URLを使用してスクレイピングを行う（デフォルト：無効）')
+    parser.add_argument('--extract-urls', type=str, default=None,
+                      help='CSVファイルからURLを抽出する（CSVファイルのパスを指定）')
+    parser.add_argument('--url-output', type=str, default=None,
+                      help='抽出したURLの出力ファイル名（指定しない場合はコンソールに出力）')
+    parser.add_argument('--scrape-urls', type=str, default=None,
+                      help='CSVファイルからURLを抽出し、スクレイピングする（CSVファイルのパスを指定）')
     return parser.parse_args()
 
 async def scrape_lancers(search_query: Optional[str] = None, output_file: Optional[str] = None, headless: bool = True, with_details: bool = False, data_search: bool = False, data_search_project: bool = False):
@@ -115,18 +121,83 @@ async def main():
         # コマンドライン引数の解析
         args = parse_arguments()
         
-        # スクレイピングの実行
-        await scrape_lancers(
-            search_query=args.search_query,
-            output_file=args.output,
-            headless=not args.no_headless,
-            with_details=args.with_details,
-            data_search=args.data_search,
-            data_search_project=args.data_search_project
-        )
+        if args.extract_urls:
+            # URL抽出の実行
+            logger = setup_logging()
+            logger.info(f"CSVファイルからURLを抽出します: {args.extract_urls}")
+            csv_handler = CSVHandler()
+            urls = csv_handler.extract_urls(args.extract_urls)
+            if urls:
+                if args.url_output:
+                    with open(args.url_output, 'w', encoding='utf-8') as f:
+                        for url in urls:
+                            f.write(url + '\n')
+                    logger.info(f"URLをファイルに保存しました: {args.url_output}")
+                else:
+                    logger.info("抽出したURL:")
+                    for url in urls:
+                        print(url)
+                logger.info(f"抽出されたURLの数: {len(urls)}")
+            else:
+                logger.warning("URLが見つかりませんでした")
+        elif args.scrape_urls:
+            # URL抽出してスクレイピングの実行
+            logger = setup_logging()
+            logger.info(f"CSVファイルからURLを抽出し、スクレイピングします: {args.scrape_urls}")
+            csv_handler = CSVHandler()
+            urls = csv_handler.extract_urls(args.scrape_urls)
+            if urls:
+                logger.info(f"抽出されたURLの数: {len(urls)}")
+                browser = LancersBrowser(headless=not args.no_headless)
+                parser = LancersParser()
+                results = []
+                chunk_size = 10
+                for i in range(0, len(urls), chunk_size):
+                    chunk = urls[i:i + chunk_size]
+                    logger.info(f"チャンク {i+1}-{min(i+chunk_size, len(urls))}/{len(urls)} を処理中")
+                    chunk_results = []
+                    async with browser:
+                        for j, url in enumerate(chunk, 1):
+                            logger.info(f"URL {i+j}/{len(urls)} を処理中: {url}")
+                            detail = await browser.get_work_detail_by_url(url)
+                            if detail:
+                                parsed_detail = parser.parse_work_detail(detail)
+                                chunk_results.append(parsed_detail)
+                                results.append(parsed_detail)
+                            else:
+                                logger.warning(f"URL {url} の詳細情報を取得できませんでした")
+                    if chunk_results:
+                        chunk_output_path = csv_handler.save_scraped_data(chunk_results, args.scrape_urls + f"_chunk_{i+1}-{min(i+chunk_size, len(urls))}")
+                        if chunk_output_path:
+                            logger.info(f"チャンクのスクレイピング結果を保存しました: {chunk_output_path}")
+                            logger.info(f"このチャンクで取得した案件数: {len(chunk_results)}件")
+                    if i + chunk_size < len(urls):
+                        response = input(f"次のチャンク({i+chunk_size+1}-{min(i+chunk_size*2, len(urls))}/{len(urls)})に進みますか？ (y/n): ")
+                        if response.lower() != 'y':
+                            logger.info("ユーザーの選択により処理を中断しました")
+                            break
+                if results:
+                    output_path = csv_handler.save_scraped_data(results, args.scrape_urls)
+                    if output_path:
+                        logger.info(f"全スクレイピング結果を保存しました: {output_path}")
+                        logger.info(f"総取得した案件数: {len(results)}件")
+                else:
+                    logger.warning("スクレイピング結果がありません")
+            else:
+                logger.warning("URLが見つかりませんでした")
+        else:
+            # 通常のスクレイピングの実行
+            await scrape_lancers(
+                search_query=args.search_query,
+                output_file=args.output,
+                headless=not args.no_headless,
+                with_details=args.with_details,
+                data_search=args.data_search,
+                data_search_project=args.data_search_project
+            )
 
     except KeyboardInterrupt:
-        print("\nスクレイピングを中断しました")
+        print("\n処理を中断しました")
         sys.exit(1)
     except Exception as e:
         print(f"エラーが発生しました: {str(e)}")

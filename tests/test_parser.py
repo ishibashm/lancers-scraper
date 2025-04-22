@@ -40,14 +40,62 @@ def test_parse_delivery_date(parser):
 
 def test_parse_people(parser):
     """募集人数のパース処理テスト"""
-    # 正常系
+    # 正常系 - 基本パターン
     assert parser.parse_people("3人") == "3"
     assert parser.parse_people("人数未設定") == "人数未設定"
+    
+    # 正常系 - 新しいパターン
+    assert parser.parse_people("募集人数5人") == "5"
+    assert parser.parse_people("(募集人数1人)") == "1"
+    assert parser.parse_people("募集人数 2 人") == "2"
     
     # 異常系
     assert parser.parse_people("") == ""
     assert parser.parse_people(None) == None
     assert parser.parse_people("複数名") == "複数名"
+
+def test_format_date(parser):
+    """日付フォーマット変換処理のテスト"""
+    # 正常系 - 日付のみ
+    assert parser.format_date("2025年4月21日") == "2025-04-21"
+    assert parser.format_date("2025年04月21日") == "2025-04-21"
+    assert parser.format_date("2025年12月1日") == "2025-12-01"
+    
+    # 正常系 - 日付と時刻
+    assert parser.format_date("2025年4月21日 18:17") == "2025-04-21 18:17"
+    assert parser.format_date("2025年04月21日 9:05") == "2025-04-21 09:05"
+    
+    # 異常系
+    assert parser.format_date("") == ""
+    assert parser.format_date(None) == None
+    assert parser.format_date("無効な日付") == "無効な日付"
+    assert parser.format_date("2025/04/21") == "2025/04/21"  # 変換されないパターン
+
+def test_parse_work_detail(parser):
+    """案件詳細情報のパース処理テスト"""
+    # テスト用のダミーデータ
+    test_detail = {
+        'title': 'Webアプリ開発',
+        'url': 'https://www.lancers.jp/work/detail/12345',
+        'work_id': '12345',
+        'deadline': '締切：2025年4月21日 18:17',
+        'people': '(募集人数1人)',
+        'delivery_date': '希望納期：2025年5月16日',
+        'period': '5日間'
+    }
+    
+    parsed = parser.parse_work_detail(test_detail)
+    
+    assert parsed['title'] == 'Webアプリ開発'
+    assert parsed['url'] == 'https://www.lancers.jp/work/detail/12345'
+    assert parsed['work_id'] == '12345'
+    assert parsed['deadline'] == '2025-04-21 18:17'
+    assert parsed['deadline_raw'] == '締切：2025年4月21日 18:17'
+    assert parsed['people'] == '1'
+    assert parsed['delivery_date'] == '2025-05-16'
+    assert parsed['delivery_date_raw'] == '希望納期：2025年5月16日'
+    assert parsed['period'] == '5日間'
+    assert 'scraped_at' in parsed
 
 def test_parse_results(parser):
     """検索結果全体のパース処理テスト"""
