@@ -3,3 +3,5 @@ data/output/
 *.log
 .env
 venv
+*.png
+page.txt

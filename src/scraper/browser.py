@@ -187,13 +187,7 @@ class LancersBrowser:
             from dotenv import load_dotenv
             import os
             load_dotenv()
-            username = os.getenv("LANCERS_USERNAME", "")
-            password = os.getenv("LANCERS_PASSWORD", "")
-            if username and password:
-                await self.login_if_needed(url, username, password)
-            else:
-                self.logger.warning("ログイン情報が設定されていません。環境変数 LANCERS_USERNAME と LANCERS_PASSWORD を設定してください。")
-            
+            # Login should be handled before calling search methods if needed
             await self.page.goto(url)
             await self.page.wait_for_load_state('networkidle')
             await asyncio.sleep(2)
@@ -273,13 +267,7 @@ class LancersBrowser:
             from dotenv import load_dotenv
             import os
             load_dotenv()
-            username = os.getenv("LANCERS_USERNAME", "")
-            password = os.getenv("LANCERS_PASSWORD", "")
-            if username and password:
-                await self.login_if_needed(url, username, password)
-            else:
-                self.logger.warning("ログイン情報が設定されていません。環境変数 LANCERS_USERNAME と LANCERS_PASSWORD を設定してください。")
-            
+            # Login should be handled before calling search methods if needed
             await self.page.goto(url)
             await self.page.wait_for_load_state('networkidle')
             await asyncio.sleep(2)  # 追加の待機時間
@@ -341,13 +329,7 @@ class LancersBrowser:
             from dotenv import load_dotenv
             import os
             load_dotenv()
-            username = os.getenv("LANCERS_USERNAME", "")
-            password = os.getenv("LANCERS_PASSWORD", "")
-            if username and password:
-                await self.login_if_needed(url, username, password)
-            else:
-                self.logger.warning("ログイン情報が設定されていません。環境変数 LANCERS_USERNAME と LANCERS_PASSWORD を設定してください。")
-            
+            # Login should be handled before calling search methods if needed
             await self.page.goto(url)
             await self.page.wait_for_load_state('networkidle')
             await asyncio.sleep(2)  # 追加の待機時間
@@ -464,51 +446,51 @@ class LancersBrowser:
             # 複数の方法で情報を抽出
             detail_info = {}
             
-            # 1. CSSセレクタによる抽出（従来の方法）
-            deadline_selector = await self._get_text('.c-definitionList__description:has-text("募集期間")')
-            people_selector = await self._get_text('.c-definitionList__description:has-text("募集人数")')
-            delivery_date_selector = await self._get_text('.c-definitionList__description:has-text("希望納期")')
+            # 締切と希望納期をユーザー指定セレクタで抽出
+            deadline = ""
+            delivery_date = ""
+            schedule_items = await self.page.query_selector_all('span.p-work-detail-schedule__item')
+            for item in schedule_items:
+                item_title_elem = await item.query_selector('span.p-work-detail-schedule__item__title')
+                item_text_elem = await item.query_selector('span.p-work-detail-schedule__text')
+                if item_title_elem and item_text_elem:
+                    item_title = await item_title_elem.text_content()
+                    item_text = await item_text_elem.text_content()
+                    if item_title and item_text:
+                        if '締切' in item_title:
+                            deadline = item_text.strip()
+                        elif '希望納期' in item_title:
+                            delivery_date = item_text.strip()
+
+            # 他の情報も抽出（既存のロジックを流用・調整）
+            # 他の情報も抽出（募集人数は複数のセレクタを試す）
+            people = ""
+            # まず <p>(募集人数X人)</p> 形式を探す
+            people_p_elem = await self.page.query_selector('p:has-text("(募集人数")')
+            if people_p_elem:
+                people_text = await people_p_elem.text_content()
+                match = re.search(r'\(募集人数(\d+)人\)', people_text)
+                if match:
+                    people = match.group(1) + "人" # parser側で数字のみ抽出する想定
             
-            detail_info['deadline_selector'] = deadline_selector
-            detail_info['people_selector'] = people_selector
-            detail_info['delivery_date_selector'] = delivery_date_selector
-            
-            # 2. 正規表現による抽出（ページテキスト全体から）
-            # 締切日時を抽出（例: 2025年04月21日 18:17）
-            deadline_match = re.search(r'締切[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{1,2})', page_text)
-            if deadline_match:
-                detail_info['deadline_regex'] = deadline_match.group(1)
-            
-            # 希望納期を抽出（例: 2025年05月16日）
-            delivery_date_match = re.search(r'希望納期[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日)', page_text)
-            if delivery_date_match:
-                detail_info['delivery_date_regex'] = delivery_date_match.group(1)
-            
-            # 募集期間を抽出（例: 5日間）
-            period_match = re.search(r'募集期間\s*(\d+)日間', page_text)
-            if period_match:
-                detail_info['period'] = period_match.group(1) + '日間'
-            
-            # 募集人数を抽出（例: 募集人数1人）
-            people_match = re.search(r'募集人数\s*(\d+)\s*人', page_text)
-            if people_match:
-                detail_info['people_regex'] = people_match.group(1) + '人'
-            
-            # 結果を統合（正規表現の結果を優先）
-            deadline = detail_info.get('deadline_regex', deadline_selector)
-            people = detail_info.get('people_regex', people_selector)
-            delivery_date = detail_info.get('delivery_date_regex', delivery_date_selector)
-            period = detail_info.get('period', '')
+            # 上記で見つからなければ、従来の方法を試す
+            if not people:
+                 people_elem = await self.page.query_selector('.c-definitionList__description:has-text("募集人数")')
+                 if people_elem:
+                     people = await people_elem.text_content()
+
+            period_elem = await self.page.query_selector('.c-definitionList__description:has-text("募集期間")')
+            period = await period_elem.text_content() if period_elem else ""
 
             return {
-                'title': title,
-                'url': url,
-                'work_id': work_id,
-                'deadline': deadline,
-                'people': people,
-                'delivery_date': delivery_date,
-                'period': period,
-                'detail_info': detail_info  # デバッグ用（最終版では削除）
+                'title': title.strip() if title else "",
+                'url': url, # Keep original URL
+                'work_id': work_id, # Keep work_id extracted from URL
+                'deadline': deadline, # Use newly extracted deadline
+                'people': people.strip() if people else "",
+                'delivery_date': delivery_date, # Use newly extracted delivery_date
+                'period': period.strip() if period else ""
+                # Removed detail_info for cleaner output
             }
 
         except Exception as e:
@@ -530,13 +512,7 @@ class LancersBrowser:
             from dotenv import load_dotenv
             import os
             load_dotenv()
-            username = os.getenv("LANCERS_USERNAME", "")
-            password = os.getenv("LANCERS_PASSWORD", "")
-            if username and password:
-                await self.login_if_needed(url, username, password)
-            else:
-                self.logger.warning("ログイン情報が設定されていません。環境変数 LANCERS_USERNAME と LANCERS_PASSWORD を設定してください。")
-            
+            # Login should be handled before calling this method
             await self.page.goto(url)
             await self.page.wait_for_load_state('networkidle')
             
@@ -562,55 +538,55 @@ class LancersBrowser:
             # 複数の方法で情報を抽出
             detail_info = {}
             
-            # 1. CSSセレクタによる抽出（従来の方法）
-            deadline_selector = await self._get_text('.c-definitionList__description:has-text("募集期間")')
-            people_selector = await self._get_text('.c-definitionList__description:has-text("募集人数")')
-            delivery_date_selector = await self._get_text('.c-definitionList__description:has-text("希望納期")')
-            
-            detail_info['deadline_selector'] = deadline_selector
-            detail_info['people_selector'] = people_selector
-            detail_info['delivery_date_selector'] = delivery_date_selector
-            
-            # 2. 正規表現による抽出（ページテキスト全体から）
-            # 締切日時を抽出（例: 2025年04月21日 18:17）
-            deadline_match = re.search(r'締切[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{1,2})', page_text)
-            if deadline_match:
-                detail_info['deadline_regex'] = deadline_match.group(1)
-            
-            # 希望納期を抽出（例: 2025年05月16日）
-            delivery_date_match = re.search(r'希望納期[：:]\s*(\d{4}年\d{1,2}月\d{1,2}日)', page_text)
-            if delivery_date_match:
-                detail_info['delivery_date_regex'] = delivery_date_match.group(1)
-            
-            # 募集期間を抽出（例: 5日間）
-            period_match = re.search(r'募集期間\s*(\d+)日間', page_text)
-            if period_match:
-                detail_info['period'] = period_match.group(1) + '日間'
-            
-            # 募集人数を抽出（例: 募集人数1人）
-            people_match = re.search(r'募集人数\s*(\d+)\s*人', page_text)
-            if people_match:
-                detail_info['people_regex'] = people_match.group(1) + '人'
-            
-            # 結果を統合（正規表現の結果を優先）
-            deadline = detail_info.get('deadline_regex', deadline_selector)
-            people = detail_info.get('people_regex', people_selector)
-            delivery_date = detail_info.get('delivery_date_regex', delivery_date_selector)
-            period = detail_info.get('period', '')
+            # 締切と希望納期をユーザー指定セレクタで抽出
+            deadline = ""
+            delivery_date = ""
+            schedule_items = await self.page.query_selector_all('span.p-work-detail-schedule__item')
+            for item in schedule_items:
+                item_title_elem = await item.query_selector('span.p-work-detail-schedule__item__title')
+                item_text_elem = await item.query_selector('span.p-work-detail-schedule__text')
+                if item_title_elem and item_text_elem:
+                    item_title = await item_title_elem.text_content()
+                    item_text = await item_text_elem.text_content()
+                    if item_title and item_text:
+                        if '締切' in item_title:
+                            deadline = item_text.strip()
+                        elif '希望納期' in item_title:
+                            delivery_date = item_text.strip()
+
+            # 他の情報も抽出（既存のロジックを流用・調整）
+            # 他の情報も抽出（募集人数は複数のセレクタを試す）
+            people = ""
+            # まず <p>(募集人数X人)</p> 形式を探す
+            people_p_elem = await self.page.query_selector('p:has-text("(募集人数")')
+            if people_p_elem:
+                 people_text = await people_p_elem.text_content()
+                 match = re.search(r'\(募集人数(\d+)人\)', people_text)
+                 if match:
+                     people = match.group(1) + "人" # parser側で数字のみ抽出する想定
+
+            # 上記で見つからなければ、従来の方法を試す
+            if not people:
+                 people_elem = await self.page.query_selector('.c-definitionList__description:has-text("募集人数")')
+                 if people_elem:
+                     people = await people_elem.text_content()
+
+            period_elem = await self.page.query_selector('.c-definitionList__description:has-text("募集期間")')
+            period = await period_elem.text_content() if period_elem else ""
 
             # URLからwork_idを抽出
             work_id_match = re.search(r'/work/detail/(\d+)', url)
             work_id = work_id_match.group(1) if work_id_match else "不明"
 
             return {
-                'title': title,
-                'url': url,
-                'work_id': work_id,
-                'deadline': deadline,
-                'people': people,
-                'delivery_date': delivery_date,
-                'period': period,
-                'detail_info': detail_info  # デバッグ用（最終版では削除）
+                'title': title.strip() if title else "",
+                'url': url, # Keep original URL
+                'work_id': work_id, # Keep work_id extracted from URL
+                'deadline': deadline, # Use newly extracted deadline
+                'people': people.strip() if people else "",
+                'delivery_date': delivery_date, # Use newly extracted delivery_date
+                'period': period.strip() if period else ""
+                # Removed detail_info for cleaner output
             }
 
         except Exception as e:
@@ -633,86 +609,110 @@ class LancersBrowser:
             return ""
         except Exception:
             return ""
-
-    async def check_page_type(self, url: str) -> str:
+    
+    async def login(self, email: str, password: str) -> bool: # 引数名を email に変更
         """
-        指定したURLのページタイプ（会員/非会員）を判定する
+        Lancersにログインする
         Args:
-            url (str): 判定対象のURL
-        Returns:
-            str: ページタイプ ('member' または 'non-member')
-        """
-        try:
-            # 新しいブラウザコンテキストを使用してキャッシュの影響を排除
-            context = await self.browser.new_context()
-            page = await context.new_page()
-            self.logger.info(f"ページタイプ判定のためURLにアクセス: {url}")
-            
-            await page.goto(url)
-            await page.wait_for_load_state('networkidle')
-            await asyncio.sleep(2)
-
-            # 会員ページかどうかを判定（特定のログイン要素の存在をチェック）
-            login_element = await page.query_selector('.login-button, .user-profile, #login, [class*="login"], [id*="login"], [class*="user"], [id*="user"]')
-            page_type = 'member' if login_element else 'non-member'
-            
-            self.logger.info(f"ページタイプ判定結果: {page_type} for URL: {url}")
-            await page.close()
-            await context.close()
-            return page_type
-
-        except Exception as e:
-            self.logger.error(f"ページタイプの判定に失敗しました: {str(e)}")
-            return 'unknown'
-
-    async def login_if_needed(self, url: str, username: str, password: str) -> bool:
-        """
-        会員ページの場合、ログイン処理を実行する
-        Args:
-            url (str): アクセスするURL
-            username (str): ログイン用のユーザー名
+            email (str): ログイン用のメールアドレス
             password (str): ログイン用のパスワード
         Returns:
             bool: ログインが成功したかどうか
         """
         try:
-            page_type = await self.check_page_type(url)
-            if page_type == 'member':
-                self.logger.info(f"会員ページのためログイン処理を開始: {url}")
-                context = await self.browser.new_context()
-                page = await context.new_page()
-                
-                await page.goto("https://www.lancers.jp/user/login")
-                await page.wait_for_load_state('networkidle')
-                await asyncio.sleep(2)
-                
-                # ログイン情報を入力
-                await page.fill('input[name="username"]', username)
-                await page.fill('input[name="password"]', password)
-                
-                # ログインボタンをクリック
-                await page.click('button[type="submit"]')
-                await page.wait_for_load_state('networkidle')
-                await asyncio.sleep(3)
-                
-                # ログイン成功を確認
-                if "マイページ" in await page.title() or await page.query_selector('.user-profile'):
-                    self.logger.info("ログインに成功しました")
-                    await page.goto(url)
-                    await page.wait_for_load_state('networkidle')
-                    await asyncio.sleep(2)
-                    return True
-                else:
-                    self.logger.error("ログインに失敗しました")
-                    await page.close()
-                    await context.close()
-                    return False
-            else:
-                self.logger.info(f"非会員ページのためログイン不要: {url}")
+            if not self.page:
+                self.logger.error("ページが初期化されていません。ログインできません。")
+                return False
+
+            login_url = "https://www.lancers.jp/user/login"
+            self.logger.info(f"ログインページにアクセス: {login_url}")
+            await self.page.goto(login_url)
+            # Wait for email field to be visible and stable
+            await self.page.wait_for_selector('input#UserEmail', state='visible')
+            await self.page.wait_for_function("document.readyState === 'complete'")
+            await asyncio.sleep(1) # Small extra delay
+
+            # ログイン情報入力
+            try:
+                 # Wait for the element to be editable
+                await self.page.wait_for_selector('input#UserEmail:not([disabled])')
+                await self.page.fill('input#UserEmail', email)
+            except Exception as e:
+                self.logger.error(f"メールアドレス入力フィールドが見つからないか、入力できませんでした: {e}")
+                await self.page.screenshot(path='error_screenshot_email_fill.png') # Debug screenshot
+                return False
+
+            try:
+                 # Wait for the element to be editable
+                await self.page.wait_for_selector('input#UserPassword:not([disabled])')
+                await self.page.fill('input#UserPassword', password)
+                await self.page.screenshot(path='debug_screenshot_after_fill.png') # Debug screenshot after filling
+            except Exception as e:
+                self.logger.error(f"パスワード入力フィールドが見つからないか、入力できませんでした: {e}")
+                await self.page.screenshot(path='error_screenshot_password_fill.png') # Debug screenshot
+                return False
+            
+            # ログインボタンクリック
+            try:
+                # Wait for button to be enabled and visible
+                await self.page.wait_for_selector('button#form_submit:not([disabled])', state='visible')
+                await self.page.click('button#form_submit')
+                await self.page.screenshot(path='debug_screenshot_after_click.png') # Debug screenshot immediately after click
+            except Exception as e:
+                 self.logger.error(f"ログインボタンが見つからないか、クリックできませんでした: {e}")
+                 await self.page.screenshot(path='error_screenshot_button_click.png') # Debug screenshot
+                 return False
+            
+            # Navigation or content change after click might take time
+            self.logger.info("ログインボタンクリック後、ナビゲーション/状態変化待機中...")
+            try:
+                 # Wait for either navigation or a common logged-in element to appear
+                 # Increased timeout to handle potentially slow redirects or checks
+                 await self.page.wait_for_navigation(timeout=15000, wait_until='networkidle') 
+            except Exception as nav_error:
+                 self.logger.warning(f"ナビゲーション待機タイムアウト ({nav_error})。要素でのログイン成功確認を試みます。")
+                 # If navigation times out, still check for logged-in indicators
+                 pass
+            
+            await asyncio.sleep(5) # Increased wait time after potential navigation/action
+
+            # ログイン成功確認 (複数の要素とURLで確認)
+            current_url = self.page.url
+            self.logger.info(f"ログイン試行後のURL: {current_url}")
+            
+            # Common indicators of being logged in
+            logged_in_selectors = [
+                '.c-header-user-dropdown__user-name', # Header user name
+                '.p-mypage-sidebar__profile__name',    # Mypage sidebar name
+                '#header_mypage_button',               # Mypage button in header
+                'a[href="/mypage"]'                    # Direct link to mypage
+            ]
+            logged_in_indicator_found = False
+            for selector in logged_in_selectors:
+                indicator = await self.page.query_selector(selector)
+                if indicator:
+                    self.logger.info(f"ログイン成功の兆候を発見 (要素: {selector})")
+                    logged_in_indicator_found = True
+                    break # Stop checking once one indicator is found
+
+            # Final check based on URL and indicators
+            if "mypage" in current_url or logged_in_indicator_found:
+                self.logger.info("ログインに成功しました")
+                await self.page.screenshot(path='debug_screenshot_login_success.png') # Screenshot on success
                 return True
+            else:
+                await self.page.screenshot(path='error_screenshot_login_fail.png') # Screenshot on failure
+                # Check for explicit error messages again
+                error_message = await self.page.query_selector('.c-form-error__message, .error_message, .alert-danger, #js-error') # Added generic error id
+                if error_message:
+                    error_text = await error_message.text_content()
+                    self.logger.error(f"ログインに失敗しました: {error_text.strip()}")
+                else:
+                     self.logger.error(f"ログインに失敗しました。ログイン後のページに遷移しませんでした。現在のURL: {current_url}")
+                return False
 
         except Exception as e:
-            self.logger.error(f"ログイン処理中にエラーが発生しました: {str(e)}")
+            self.logger.error(f"ログイン処理中に予期せぬエラーが発生しました: {str(e)}")
             return False
 
     async def __aenter__(self):
