@@ -139,36 +139,41 @@ class LancersParser:
             Dict[str, Any]: パース済みの案件詳細情報
         """
         try:
-            # 締切日時のパース
-            deadline_raw = detail.get('deadline', '')
-            deadline = self.parse_deadline(deadline_raw)
+            # 締切日時のパース (正しいキー名を使用)
+            deadline_raw = detail.get('deadline_raw', '') # 'deadline' -> 'deadline_raw'
+            deadline = self.parse_deadline(deadline_raw) # parse_deadline は _raw 無しの整形用なのでそのまま
             # 標準形式に変換
             deadline_formatted = self.format_date(deadline)
             
             # 募集人数のパース
-            people = self.parse_people(detail.get('people', ''))
+            people = self.parse_people(detail.get('people', '')) # people はキー名が一致している
             
-            # 希望納期のパース
-            delivery_date_raw = detail.get('delivery_date', '')
-            delivery_date = self.parse_delivery_date(delivery_date_raw)
+            # 希望納期のパース (正しいキー名を使用)
+            delivery_date_raw = detail.get('delivery_date_raw', '') # 'delivery_date' -> 'delivery_date_raw'
+            delivery_date = self.parse_delivery_date(delivery_date_raw) # parse_delivery_date は _raw 無しの整形用なのでそのまま
             # 標準形式に変換
             delivery_date_formatted = self.format_date(delivery_date)
             
             # 募集期間のパース
-            period = detail.get('period', '')
+            period = detail.get('period', '') # period は現在CSV出力から除外されている
 
-            return {
+            # デバッグログ: 返す直前の値を確認
+            self.logger.info(f"Parser returning: deadline_raw='{deadline_raw}', delivery_date_raw='{delivery_date_raw}', people='{people}'")
+
+            return_dict = {
                 'title': detail.get('title', ''),
                 'url': detail.get('url', ''),
-                'work_id': detail.get('work_id', ''),
-                'deadline': deadline_formatted,
-                'deadline_raw': deadline_raw,
-                'people': people,
-                'delivery_date': delivery_date_formatted,
-                'delivery_date_raw': delivery_date_raw,
-                'period': period,
+                'work_id': detail.get('work_id', ''), # CSV出力からは除外されている
+                'deadline': deadline_formatted, # CSV出力からは除外されている
+                'deadline_raw': deadline_raw,   # ★CSVに出力されるべき値
+                'people': people,               # ★CSVに出力されるべき値 (整形後)
+                'delivery_date': delivery_date_formatted, # CSV出力からは除外されている
+                'delivery_date_raw': delivery_date_raw, # ★CSVに出力されるべき値
+                'period': period,               # CSV出力からは除外されている
                 'scraped_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
+            self.logger.debug(f"Parser return dict: {return_dict}") # より詳細なデバッグログ
+            return return_dict
 
         except Exception as e:
             self.logger.error(f"案件詳細情報のパースに失敗しました: {str(e)}")
@@ -200,4 +205,4 @@ class LancersParser:
                 self.logger.error(f"結果の解析に失敗しました: {str(e)}")
                 continue
 
-        return parsed_results 
+        return parsed_results
