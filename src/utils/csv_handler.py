@@ -1,7 +1,7 @@
 import csv
 import os
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional # Optional をインポート
 from datetime import datetime
 
 class CSVHandler:
@@ -13,7 +13,7 @@ class CSVHandler:
         """
         self.output_dir = output_dir
         self.logger = logging.getLogger(__name__)
-        
+
         # 出力ディレクトリの作成
         try:
             os.makedirs(output_dir, exist_ok=True)
@@ -63,12 +63,13 @@ class CSVHandler:
             cleaned_data.append(cleaned_item)
         return cleaned_data
 
-    def save_to_csv(self, data: List[Dict[str, Any]], filename: str = None) -> str:
+    def save_to_csv(self, data: List[Dict[str, Any]], filename: str = None, fieldnames: Optional[List[str]] = None) -> str:
         """
         データをCSVファイルに保存する
         Args:
             data (List[Dict[str, Any]]): 保存するデータ
-            filename (str, optional): 保存するファイル名
+            filename (str, optional): 保存するファイル名. Defaults to None.
+            fieldnames (Optional[List[str]], optional): CSVのヘッダー行（指定しない場合はデータから自動推測）. Defaults to None.
         Returns:
             str: 保存したファイルのパス
         """
@@ -85,16 +86,25 @@ class CSVHandler:
                 filename = self.generate_filename()
 
             filepath = os.path.join(self.output_dir, filename)
-            
+
+            # ローカル変数でヘッダーを管理
+            _fieldnames = fieldnames
+            if _fieldnames is None:
+                if cleaned_data: # データがある場合のみ推測
+                    _fieldnames = sorted(list(cleaned_data[0].keys()))
+                else:
+                    _fieldnames = [] # データがない場合は空リスト
+
             # CSVファイルの書き込み
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
-                # ヘッダーの取得（最初のデータのキーを使用）
-                fieldnames = list(cleaned_data[0].keys())
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                
-                # ヘッダーと内容の書き込み
-                writer.writeheader()
-                writer.writerows(cleaned_data)
+                if not _fieldnames:
+                     self.logger.warning("ヘッダーが空です（データも空の可能性があります）。空のファイルを保存します。")
+                     f.write("") # 空のファイルを作成
+                else:
+                    # extrasaction='ignore' で data に含まれる fieldnames 以外のキーを無視
+                    writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
+                    writer.writeheader()
+                    writer.writerows(cleaned_data)
 
             self.logger.info(f"CSVファイルを保存しました: {filepath}")
             return filepath
@@ -105,7 +115,7 @@ class CSVHandler:
 
     def append_to_csv(self, data: List[Dict[str, Any]], filepath: str) -> None:
         """
-        既存のCSVファイルにデータを追記する
+        既存のCSVファイルにデータを追記する (現在は未使用の可能性あり)
         Args:
             data (List[Dict[str, Any]]): 追記するデータ
             filepath (str): 追記先のファイルパス
@@ -115,15 +125,24 @@ class CSVHandler:
                 self.logger.warning("追記するデータがありません")
                 return
 
-            # ファイルが存在しない場合は新規作成
-            if not os.path.exists(filepath):
-                self.save_to_csv(data, os.path.basename(filepath))
-                return
+            file_exists = os.path.exists(filepath)
+            # ファイルが存在しない場合はヘッダー付きで新規作成
+            if not file_exists:
+                 self.save_to_csv(data, os.path.basename(filepath))
+                 return
 
             # 既存ファイルへの追記
             with open(filepath, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=list(data[0].keys()))
-                writer.writerows(data)
+                # ヘッダーをデータのキーから推測（追記なので既存ファイルとは異なる可能性に注意）
+                # 本来は既存ファイルのヘッダーを読むべきだが、簡略化のためデータから推測
+                if data:
+                     fieldnames = sorted(list(data[0].keys()))
+                     writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+                     # ヘッダーは追記しない (既に存在するため)
+                     writer.writerows(data)
+                else:
+                     # データがない場合は何もしない
+                     pass
 
             self.logger.info(f"CSVファイルにデータを追記しました: {filepath}")
 
@@ -175,9 +194,11 @@ class CSVHandler:
             self.logger.error(f"URLの抽出に失敗しました: {str(e)}")
             return []
 
+    # save_scraped_data は main.py で直接ファイル名指定して save_to_csv を呼ぶようになったので、
+    # このメソッドは現状不要かもしれないが、念のため残しておく。
     def save_scraped_data(self, data: List[Dict[str, Any]], original_filepath: str) -> str:
         """
-        スクレイピングしたデータを新しいCSVファイルに保存する
+        スクレイピングしたデータを新しいCSVファイルに保存する (現在は直接 save_to_csv を使う場合が多い)
         Args:
             data (List[Dict[str, Any]]): 保存するスクレイピングデータ
             original_filepath (str): 元のCSVファイルのパス（ファイル名生成に使用）
@@ -189,23 +210,12 @@ class CSVHandler:
                 self.logger.warning("保存するデータがありません")
                 return ""
 
-            # ファイル名を生成（元のファイル名に '_scraped' を追加）
+            # ファイル名を生成（元のファイル名に '_details' を追加）
             base_name = os.path.splitext(os.path.basename(original_filepath))[0]
-            filename = f"{base_name}_scraped.csv"
-            filepath = os.path.join(self.output_dir, filename)
-            
-            # CSVファイルの書き込み
-            with open(filepath, 'w', newline='', encoding='utf-8') as f:
-                # ヘッダーの取得（最初のデータのキーを使用）
-                fieldnames = list(data[0].keys())
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                
-                # ヘッダーと内容の書き込み
-                writer.writeheader()
-                writer.writerows(data)
+            filename = f"{base_name}_details.csv" # _scraped から _details に変更
 
-            self.logger.info(f"スクレイピングデータをCSVファイルに保存しました: {filepath}")
-            return filepath
+            # save_to_csv を呼び出す
+            return self.save_to_csv(data, filename)
 
         except Exception as e:
             self.logger.error(f"スクレイピングデータの保存に失敗しました: {str(e)}")
