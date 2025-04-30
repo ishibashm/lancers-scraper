@@ -316,14 +316,73 @@ async def main():
                      headless=not args.no_headless,
                      data_search=args.data_search,
                      data_search_project=args.data_search_project,
-                     max_items=args.max_items
+                      max_items=args.max_items
                  )
             else:
                  logger.warning("実行するタスクが指定されていません (--search-query, --data-search, --data-search-project, --extract-urls, --scrape-urls のいずれかが必要です)。")
 
     except KeyboardInterrupt:
-        logger.info("\n処理を中断しました (KeyboardInterrupt)")
-        sys.exit(1)
+        logger.info("\n処理を中断しました (KeyboardInterrupt)。途中までのデータを保存します...")
+        # --- 中断時のCSV保存処理 ---
+        # processed_dataが定義されており、かつ空でない場合に保存を試みる
+        if 'processed_data' in locals() and processed_data:
+            try:
+                final_data_to_save = processed_data
+                logger.info(f"CSVファイルへの保存を試みます (中断時)。対象行数: {len(final_data_to_save)}")
+
+                if final_data_to_save:
+                    # ヘッダー決定ロジック (通常保存時と同様)
+                    desired_columns_ordered = [
+                        'scraped_at', 'title', 'url', 'deadline_raw',
+                        'delivery_date_raw', 'people'
+                    ]
+                    columns_to_remove = {'deadline', 'delivery_date', 'price', 'type', 'status', 'work_id', 'period'}
+                    final_fieldnames = list(desired_columns_ordered)
+                    original_keys = []
+                    # original_data がスコープ内に存在するか確認
+                    if 'original_data' in locals() and original_data:
+                         original_keys = list(original_data[0].keys())
+                    for key in original_keys:
+                        if key not in final_fieldnames and key not in columns_to_remove:
+                            final_fieldnames.append(key)
+                    all_processed_keys = set()
+                    for item in final_data_to_save:
+                        if isinstance(item, dict):
+                           all_processed_keys.update(item.keys())
+                    for key in sorted(list(all_processed_keys)):
+                        if key not in final_fieldnames and key not in columns_to_remove:
+                             final_fieldnames.append(key)
+
+                    logger.info(f"最終的なCSVヘッダー (中断時): {final_fieldnames}")
+
+                    try:
+                        # csv_filepath と csv_handler がスコープ内に存在するか確認
+                        if 'csv_filepath' in locals() and 'csv_handler' in locals():
+                            base, ext = os.path.splitext(os.path.basename(csv_filepath))
+                            # 中断したことがわかるファイル名に変更
+                            new_filename = f"{base}_details_interrupted{ext}"
+                            output_path = csv_handler.save_to_csv(final_data_to_save, new_filename, fieldnames=final_fieldnames)
+                            if output_path:
+                                logger.info(f"中断時の結果を新しいCSVファイル ({new_filename}) に保存しました: {output_path}")
+                                logger.info(f"CSVに保存した総行数: {len(final_data_to_save)}")
+                                # processed_count がスコープ内に存在するか確認
+                                if 'processed_count' in locals():
+                                    logger.info(f"うち、詳細情報を取得・マージできた件数: {processed_count}")
+                            else:
+                                logger.warning(f"中断時のCSVファイルの保存に失敗しました (パス未取得)。")
+                        else:
+                             logger.warning("中断時のCSV保存に必要な情報 (ファイルパス/ハンドラ) が不足しています。")
+
+                    except Exception as save_error:
+                         logger.error(f"中断時のCSVファイル保存中にエラーが発生しました: {save_error}")
+                else:
+                      logger.warning("中断時の保存対象データが空です。")
+            except Exception as general_save_error:
+                 logger.error(f"中断時のデータ保存処理全体でエラーが発生しました: {general_save_error}")
+        else:
+            logger.info("中断時に保存するデータがありませんでした。")
+        # --- 中断時のCSV保存処理ここまで ---
+        sys.exit(1) # 保存試行後にプログラムを終了
     except Exception as e:
         logger.error(f"予期せぬエラーが発生しました: {str(e)}", exc_info=True)
         sys.exit(1)

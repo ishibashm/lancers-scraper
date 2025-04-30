@@ -18,6 +18,7 @@ class LancersBrowser:
         self.max_pages = max_pages
         self.browser: Optional[Browser] = None
         self.page: Optional[Page] = None
+        self.context = None # コンテキストを保持する変数を追加
         self.playwright = None
         self.base_url = "https://www.lancers.jp/work/search"
 
@@ -25,23 +26,28 @@ class LancersBrowser:
         self.logger = logging.getLogger(__name__)
 
     async def start(self) -> None:
-        """ブラウザを起動し、新しいページを開く"""
+        """ブラウザを起動し、新しいコンテキストとページを開く"""
         try:
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(headless=self.headless)
-            self.page = await self.browser.new_page()
-            self.logger.info("ブラウザを起動しました")
+            # 新しいブラウザコンテキストを作成
+            self.context = await self.browser.new_context()
+            self.logger.info("ブラウザコンテキストを作成しました")
+            # コンテキストから新しいページを作成
+            self.page = await self.context.new_page()
+            self.logger.info("ブラウザを起動し、新しいページを開きました")
         except Exception as e:
             self.logger.error(f"ブラウザの起動に失敗しました: {str(e)}")
             raise
 
     async def close(self) -> None:
-        """ブラウザを終了する"""
+        """ブラウザとコンテキストを終了する"""
         try:
             if self.page: await self.page.close()
+            if self.context: await self.context.close() # コンテキストを閉じる
             if self.browser: await self.browser.close()
             if self.playwright: await self.playwright.stop()
-            self.logger.info("ブラウザを終了しました")
+            self.logger.info("ブラウザとコンテキストを終了しました")
         except Exception as e:
             self.logger.error(f"ブラウザの終了に失敗しました: {str(e)}")
             raise
@@ -302,12 +308,14 @@ class LancersBrowser:
                  await self.page.screenshot(path='error_screenshot_button_click.png')
                  return False
 
-            self.logger.info("ログインボタンクリック後、ナビゲーション/状態変化待機中...")
-            try:
-                 await self.page.wait_for_navigation(timeout=15000, wait_until='networkidle')
-            except Exception as nav_error:
-                 self.logger.warning(f"ナビゲーション待機タイムアウト ({nav_error})。要素での確認を試みます。")
-                 pass
+            self.logger.info("ログインボタンクリック後、状態変化待機中...")
+            # try:
+            #      # Playwright のバージョンによっては wait_for_navigation が存在しないためコメントアウト
+            #      # await self.page.wait_for_navigation(timeout=15000, wait_until='networkidle')
+            #      pass # 代わりに下の sleep と要素確認で待機
+            # except Exception as nav_error:
+            #      self.logger.warning(f"ナビゲーション待機処理中にエラー ({nav_error})。要素での確認を試みます。")
+            #      pass
             await asyncio.sleep(5)
 
             current_url = self.page.url

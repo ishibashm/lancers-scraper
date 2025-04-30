@@ -157,15 +157,38 @@ class LancersParser:
             # 募集期間のパース
             period = detail.get('period', '') # period は現在CSV出力から除外されている
 
-            # デバッグログ: 返す直前の値を確認
-            self.logger.info(f"Parser returning: deadline_raw='{deadline_raw}', delivery_date_raw='{delivery_date_raw}', people='{people}'")
+            # --- deadline_raw から日付部分を抽出し、YYYY-MM-DD 形式に変換 ---
+            deadline_yyyy_mm_dd = ""
+            if deadline_raw:
+                try:
+                    # まず時間部分があれば削除
+                    date_part = deadline_raw.split(' ', 1)[0]
+                    # 年月日を正規表現で抽出
+                    date_match = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', date_part)
+                    if date_match:
+                        year = date_match.group(1)
+                        month = date_match.group(2).zfill(2) # 0埋め
+                        day = date_match.group(3).zfill(2)   # 0埋め
+                        deadline_yyyy_mm_dd = f"{year}-{month}-{day}"
+                        self.logger.debug(f"Formatted deadline_raw to YYYY-MM-DD: '{deadline_yyyy_mm_dd}'")
+                    else:
+                        # マッチしない場合は元の（時間削除後の）日付部分を使用
+                        deadline_yyyy_mm_dd = date_part
+                        self.logger.warning(f"Could not parse YYYY年MM月DD日 from '{date_part}'. Using it as is.")
+                except Exception as format_error:
+                    self.logger.error(f"Error formatting deadline_raw '{deadline_raw}' to YYYY-MM-DD: {format_error}. Using original raw value.")
+                    deadline_yyyy_mm_dd = deadline_raw # エラー時は元の値に戻す
+            # --- 変換ここまで ---
+
+            # デバッグログ: 返す直前の値を確認 (YYYY-MM-DD形式の値を出力)
+            self.logger.info(f"Parser returning: deadline_raw(YYYY-MM-DD)='{deadline_yyyy_mm_dd}', delivery_date_raw='{delivery_date_raw}', people='{people}'")
 
             return_dict = {
                 'title': detail.get('title', ''),
                 'url': detail.get('url', ''),
                 'work_id': detail.get('work_id', ''), # CSV出力からは除外されている
                 'deadline': deadline_formatted, # CSV出力からは除外されている
-                'deadline_raw': deadline_raw,   # ★CSVに出力されるべき値
+                'deadline_raw': deadline_yyyy_mm_dd,   # ★YYYY-MM-DD形式で出力するように変更
                 'people': people,               # ★CSVに出力されるべき値 (整形後)
                 'delivery_date': delivery_date_formatted, # CSV出力からは除外されている
                 'delivery_date_raw': delivery_date_raw, # ★CSVに出力されるべき値
