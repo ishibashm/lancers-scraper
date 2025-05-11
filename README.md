@@ -1,6 +1,17 @@
 # Lancers Scraper
 
-Lancersの案件情報を自動的にスクレイピングし、CSVファイルとして保存するツールです。
+Lancersの案件情報を自動的にスクレイピングし、CSVファイルとして保存するツールです。このツールを使用することで、市場分析、案件の追跡、またはデータ収集の目的で、日本の大手フリーランスプラットフォームであるLancersから案件情報を効率的に収集できます。
+
+## プロジェクト概要
+
+Lancers Scraperは、Pythonベースのウェブスクレイピングツールで、以下の機能を提供します：
+
+- キーワードや特定のデータカテゴリ（タスク/プロジェクト）に基づいた案件検索
+- 個別の案件詳細情報の抽出
+- 抽出データの処理とクリーニング
+- すべての情報をCSVファイルとしてエクスポート
+
+このツールはコマンドラインインターフェースを提供し、ヘッドレスブラウジング、バッチ処理、会員限定コンテンツへのアクセスのためのログイン機能など、スクレイピングプロセスをカスタマイズするための様々なオプションを備えています。
 
 ## 機能
 
@@ -192,6 +203,53 @@ python src/main.py --extract-urls "path/to/your/csvfile.csv" --url-output "extra
 - ログレベルは`INFO`がデフォルトです。
 - エラー発生時は詳細な情報が記録されます。
 - `--scrape-urls` 実行時にログインに失敗した場合、`error_screenshot_*.png` という名前のスクリーンショットが保存されることがあります。
+
+## システムアーキテクチャ
+
+Lancers Scraperは以下の主要なコンポーネントで構成されています：
+
+1. **ブラウザ自動化**: Playwrightを使用してLancersウェブサイトとのインタラクションを管理
+2. **データ解析**: ウェブページから生データを抽出し、フォーマット
+3. **CSV処理**: CSVファイルの読み込み、書き込み、処理を管理
+4. **コマンドラインインターフェース**: ユーザーとの対話を提供し、スクレイピングプロセスを調整
+5. **設定管理**: 環境変数とシステム設定を処理
+
+## プロジェクト構造
+
+### 主要ファイルとディレクトリ
+
+- **`src/main.py`**: アプリケーションのエントリーポイント。引数解析とスクレイピングプロセスの調整を担当
+- **`src/scraper/browser.py`**: ブラウザ自動化とデータ抽出を処理する`LancersBrowser`クラスを含む
+- **`src/scraper/parser.py`**: スクレイピングしたデータの解析とフォーマットを行う`LancersParser`クラスを含む
+- **`src/utils/csv_handler.py`**: CSV操作のための`CSVHandler`クラスを提供
+- **`src/utils/config.py`**: アプリケーション設定を管理する`Config`クラスを含む
+- **`src/utils/retry_handler.py`**: 一時的なエラーを処理するための再試行メカニズムを実装
+- **`data/output/`**: スクレイピングしたデータがCSVファイルとして保存されるディレクトリ
+- **`tests/`**: システムの各コンポーネントのユニットテストを含む
+
+### 主要クラスと機能
+
+- **`LancersBrowser`**: Lancersのスクレイピングのためのブラウザ自動化ロジックをカプセル化
+  - `start()`: ブラウザインスタンスを起動
+  - `search_short_videos(search_query)`: キーワードクエリに基づいて案件を検索
+  - `search_with_data_url()`: データ関連のタスクを検索
+  - `search_with_data_project_url()`: データ関連のプロジェクトを検索
+  - `get_work_detail_by_url(url)`: 詳細な案件情報を取得
+
+- **`LancersParser`**: スクレイピングしたデータの解析とフォーマットを処理
+  - `parse_results(results)`: 基本的な検索結果を解析
+  - `parse_work_detail(detail)`: 詳細な案件情報を解析
+  - `format_date(date_str)`: 日本語の日付形式を標準形式に変換
+
+- **`CSVHandler`**: CSV操作を管理
+  - `save_to_csv(data, filename)`: データをCSVファイルに保存
+  - `read_csv(filepath)`: CSVファイルからデータを読み込み
+  - `extract_urls(filepath)`: CSVファイルの指定された列からURLを抽出
+
+- **`main.py`の主要機能**:
+  - `parse_arguments()`: コマンドライン引数を処理
+  - `scrape_lancers(search_query, output)`: 検索クエリに基づいてスクレイピングを行う主要機能
+  - `main()`: スクレイピングワークフロー全体を調整するエントリーポイント
 
 ## 開発者向け情報
 
