@@ -113,8 +113,10 @@ python src/main.py --scrape-urls data/output/your_input_file.csv
 
 # チャンクサイズを3件に指定して実行
 python src/main.py --scrape-urls data/output/your_input_file.csv --chunk-size 3
+
+# チャンクごとの確認をスキップして一気に処理
+python src/main.py --scrape-urls data/output/your_input_file.csv --skip-confirm
 ```
-実行中、各チャンク完了後に続行するか確認メッセージが表示されます (`y`/`n`)。
 
 ### その他
 
@@ -142,6 +144,7 @@ python src/main.py --extract-urls "path/to/your/csvfile.csv" --url-output "extra
 - `--scrape-urls`: CSVファイルからURLを読み込み、ログインして詳細情報を取得・別ファイルに保存する（CSVファイルのパスを指定）
 - `--chunk-size`: `--scrape-urls` 実行時のチャンクサイズ (デフォルト: 10)
 - `--max-items`: 取得する最大案件数 (検索モード時)
+- `--skip-confirm`: `--scrape-urls`実行時、各チャンク完了後の続行確認をスキップし、自動的に次のチャンクに進む
 
 ## 設定
 
