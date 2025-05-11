@@ -45,6 +45,8 @@ def parse_arguments():
                        help='--scrape-urls 実行時のチャンクサイズ (デフォルト: 10)')
     parser.add_argument('--max-items', type=int, default=None,
                        help='取得する最大案件数 (検索モード時)')
+    parser.add_argument('--skip-confirm', action='store_true', default=False,
+                       help='チャンクごとの確認をスキップする')
     return parser.parse_args()
 
 async def scrape_lancers(search_query: Optional[str] = None, output_file: Optional[str] = None, headless: bool = True, data_search: bool = False, data_search_project: bool = False, max_items: Optional[int] = None):
@@ -237,6 +239,9 @@ async def main():
                         processed_data.extend(chunk_results)
 
                         if chunk_end < total_count:
+                            if args.skip_confirm:
+                                logger.info("--skip-confirm オプションにより確認なしで次のチャンクに進みます。")
+                                continue
                             try:
                                 response = input(f"--- チャンク {chunk_start + 1}-{chunk_end} 完了。次のチャンクに進みますか？ (y/n): ")
                                 if response.lower() != 'y':
