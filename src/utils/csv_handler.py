@@ -86,9 +86,16 @@ class CSVHandler:
 
             # ファイル名が指定されていない場合は生成する
             if not filename:
-                filename = self.generate_filename()
-
-            filepath = os.path.join(self.output_dir, filename)
+                filename = self.generate_filename() # これはファイル名のみを返す
+                filepath = os.path.join(self.output_dir, filename)
+            # filename が指定されている場合、それが既に適切なパスか、相対パスかを判断
+            # os.path.normpath でパス区切り文字をOS標準に正規化
+            elif os.path.isabs(filename) or \
+                 os.path.normpath(filename).startswith(os.path.normpath(self.output_dir)):
+                filepath = filename
+            else:
+                # filename がディレクトリ情報を含まない単純なファイル名の場合
+                filepath = os.path.join(self.output_dir, filename)
 
             # --- Corrected fieldnames logic ---
             _fieldnames_to_use = fieldnames # Use provided fieldnames if available

@@ -7,11 +7,12 @@ from dotenv import load_dotenv # dotenvをインポート
 from scraper.browser import LancersBrowser
 from scraper.parser import LancersParser
 from utils.csv_handler import CSVHandler
+from utils.gdrive_uploader import upload_to_gdrive # 追加
 
 def setup_logging():
     """ロギングの設定"""
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG, # INFOからDEBUGに変更
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
@@ -47,13 +48,37 @@ def parse_arguments():
                        help='取得する最大案件数 (検索モード時)')
     parser.add_argument('--skip-confirm', action='store_true', default=False,
                        help='チャンクごとの確認をスキップする')
+    # Google Drive Upload Arguments
+    parser.add_argument('--upload-gdrive', action='store_true', default=False,
+                        help='生成されたCSVファイルをGoogle Driveにアップロードする')
+    parser.add_argument('--gdrive-folder-id', type=str, default=os.getenv('GDRIVE_FOLDER_ID'),
+                        help='Google Driveのアップロード先フォルダID (環境変数 GDRIVE_FOLDER_ID でも設定可)')
+    parser.add_argument('--gdrive-credentials', type=str, default=os.getenv('GDRIVE_CREDENTIALS_PATH', 'service_account.json'),
+                        help='Google Drive APIの認証情報ファイル(JSON)へのパス (環境変数 GDRIVE_CREDENTIALS_PATH でも設定可)')
     return parser.parse_args()
 
-async def scrape_lancers(search_query: Optional[str] = None, output_file: Optional[str] = None, headless: bool = True, data_search: bool = False, data_search_project: bool = False, max_items: Optional[int] = None):
+async def scrape_lancers(
+    search_query: Optional[str] = None,
+    output_file: Optional[str] = None,
+    headless: bool = True,
+    data_search: bool = False,
+    data_search_project: bool = False,
+    max_items: Optional[int] = None,
+    # args を個別パラメータに変更
+    upload_gdrive_flag: bool = False,
+    gdrive_folder_id_val: Optional[str] = None,
+    gdrive_credentials_val: Optional[str] = None
+):
     """
     Lancersの案件リストページをスクレイピングする
     """
     logger = setup_logging()
+    load_dotenv() # .envから環境変数を読み込む
+
+    # --- DEBUG LOGGING ---
+    logger.debug(f"[scrape_lancers] Received params: upload_gdrive_flag={upload_gdrive_flag}, gdrive_folder_id_val={gdrive_folder_id_val}, gdrive_credentials_val={gdrive_credentials_val}")
+    # --- END DEBUG LOGGING ---
+
     search_type = ""
     if data_search:
         search_type = "タスク（データ検索）"
@@ -129,6 +154,19 @@ async def scrape_lancers(search_query: Optional[str] = None, output_file: Option
                     if output_path:
                         logger.info(f"スクレイピング結果を保存しました: {output_path}")
                         logger.info(f"保存した案件数: {len(parsed_results)}件")
+                        # Google Driveへのアップロード処理を追加
+                        # --- DEBUG LOGGING ---
+                        logger.debug(f"[scrape_lancers_upload_check] upload_gdrive_flag={upload_gdrive_flag}, gdrive_folder_id_val={gdrive_folder_id_val}")
+                        # --- END DEBUG LOGGING ---
+                        if upload_gdrive_flag:
+                            if gdrive_folder_id_val:
+                                logger.info(f"Google Driveへのアップロードを開始します: {output_path}")
+                                upload_to_gdrive(output_path, gdrive_folder_id_val, gdrive_credentials_val)
+                            else:
+                                logger.warning("Google DriveフォルダIDが指定されていないため、アップロードをスキップします。")
+                                logger.warning("--gdrive-folder-id 引数または GDRIVE_FOLDER_ID 環境変数を設定してください。")
+                    else:
+                        logger.warning("CSVファイルの保存に失敗したため、アップロードは行いません。")
                 else:
                      logger.warning("パース結果が空でした。")
             else:
@@ -140,8 +178,12 @@ async def scrape_lancers(search_query: Optional[str] = None, output_file: Option
 async def main():
     """メイン関数"""
     logger = setup_logging()
+    load_dotenv() # main関数直下でも念のため呼び出し (parse_argumentsでos.getenvを使うため)
     try:
         args = parse_arguments()
+        # --- DEBUG LOGGING ---
+        logger.debug(f"[main] Parsed args: upload_gdrive={args.upload_gdrive}, folder_id={args.gdrive_folder_id}, creds_path={args.gdrive_credentials}, search_query='{args.search_query}', output='{args.output}'")
+        # --- END DEBUG LOGGING ---
 
         if args.extract_urls:
             logger.info(f"CSVファイルからURLを抽出します: {args.extract_urls}")
@@ -305,6 +347,16 @@ async def main():
                             logger.info(f"結果を新しいCSVファイル ({new_filename}) に保存しました: {output_path}")
                             logger.info(f"CSVに保存した総行数: {len(final_data_to_save)}")
                             logger.info(f"うち、詳細情報を取得・マージできた件数: {processed_count}")
+                            # Google Driveへのアップロード処理を追加
+                            if args.upload_gdrive:
+                                if args.gdrive_folder_id:
+                                    logger.info(f"Google Driveへのアップロードを開始します: {output_path}")
+                                    upload_to_gdrive(output_path, args.gdrive_folder_id, args.gdrive_credentials)
+                                else:
+                                    logger.warning("Google DriveフォルダIDが指定されていないため、アップロードをスキップします。")
+                                    logger.warning("--gdrive-folder-id 引数または GDRIVE_FOLDER_ID 環境変数を設定してください。")
+                        else:
+                            logger.warning(f"新しいCSVファイル ({new_filename}) の保存に失敗したため、アップロードは行いません。")
                     except Exception as save_error:
                          logger.error(f"新しいCSVファイルの保存中にエラーが発生しました: {save_error}")
                  else:
@@ -315,13 +367,23 @@ async def main():
 
         else:
             if args.search_query or args.data_search or args.data_search_project:
+                 # --- DEBUG LOGGING for scrape_lancers call ---
+                 logger.debug(f"[main_pre_call_scrape_lancers] Passing to scrape_lancers: "
+                              f"upload_gdrive_flag={args.upload_gdrive}, "
+                              f"gdrive_folder_id_val={args.gdrive_folder_id}, "
+                              f"gdrive_credentials_val={args.gdrive_credentials}")
+                 # --- END DEBUG LOGGING ---
                  await scrape_lancers(
                      search_query=args.search_query,
                      output_file=args.output,
                      headless=not args.no_headless,
                      data_search=args.data_search,
                      data_search_project=args.data_search_project,
-                      max_items=args.max_items
+                     max_items=args.max_items,
+                     # 個別パラメータとして渡す
+                     upload_gdrive_flag=args.upload_gdrive,
+                     gdrive_folder_id_val=args.gdrive_folder_id,
+                     gdrive_credentials_val=args.gdrive_credentials
                  )
             else:
                  logger.warning("実行するタスクが指定されていません (--search-query, --data-search, --data-search-project, --extract-urls, --scrape-urls のいずれかが必要です)。")
