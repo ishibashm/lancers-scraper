@@ -42,15 +42,41 @@ class LancersBrowser:
 
     async def close(self) -> None:
         """ブラウザとコンテキストを終了する"""
+        self.logger.info("ブラウザ終了処理を開始します...")
         try:
-            if self.page: await self.page.close()
-            if self.context: await self.context.close() # コンテキストを閉じる
-            if self.browser: await self.browser.close()
-            if self.playwright: await self.playwright.stop()
-            self.logger.info("ブラウザとコンテキストを終了しました")
+            if self.page:
+                self.logger.info("ページを閉じます...")
+                await self.page.close()
+                self.logger.info("ページを閉じました。")
+            else:
+                self.logger.info("ページは存在しないか、既に閉じられています。")
+
+            if self.context:
+                self.logger.info("ブラウザコンテキストを閉じます...")
+                await self.context.close()
+                self.logger.info("ブラウザコンテキストを閉じました。")
+            else:
+                self.logger.info("ブラウザコンテキストは存在しないか、既に閉じられています。")
+
+            if self.browser:
+                self.logger.info("ブラウザを閉じます...")
+                await self.browser.close()
+                self.logger.info("ブラウザを閉じました。")
+            else:
+                self.logger.info("ブラウザは存在しないか、既に閉じられています。")
+
+            if self.playwright:
+                self.logger.info("Playwrightインスタンスを停止します...")
+                await self.playwright.stop()
+                self.logger.info("Playwrightインスタンスを停止しました。")
+            else:
+                self.logger.info("Playwrightインスタンスは存在しないか、既に停止されています。")
+
+            self.logger.info("ブラウザとコンテキストの終了処理が正常に完了しました。")
         except Exception as e:
-            self.logger.error(f"ブラウザの終了に失敗しました: {str(e)}")
-            raise
+            self.logger.error(f"ブラウザまたはPlaywrightの終了処理中にエラーが発生しました: {str(e)}", exc_info=True)
+            # raise # ここで再raiseすると、上位のexceptブロックで二重にログが出る可能性があるので、一旦コメントアウトして様子を見る
+            # もし上位でこの例外を処理する必要がある場合は、raiseを戻すか、カスタム例外をraiseする
 
     async def _extract_work_info(self, card) -> Optional[Dict[str, Any]]:
         """案件カードから情報を抽出する"""

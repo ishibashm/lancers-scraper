@@ -61,3 +61,10 @@ jobs:
             echo "--------------------------------------------------"
           done < keywords.txt
           echo "All keywords processed."
+          
+          echo "--------------------------------------------------"
+          echo "Processing data search (project)..."
+          echo "--------------------------------------------------"
+          python src/main.py --data-search-project --upload-gdrive
+          echo "Finished processing data search (project)."
+          echo "--------------------------------------------------"

@@ -4,6 +4,7 @@ import sys
 import os # osモジュールをインポート
 from typing import Optional, List, Dict, Any # List, Dict, Any をインポート
 from dotenv import load_dotenv # dotenvをインポート
+import re # 正規表現モジュールをインポート
 from scraper.browser import LancersBrowser
 from scraper.parser import LancersParser
 from utils.csv_handler import CSVHandler
@@ -148,9 +149,17 @@ async def scrape_lancers(
             if all_results:
                 logger.info(f"合計 {items_collected} 件の案件情報を取得しました。")
                 parsed_results = parser.parse_results(all_results)
+                
                 if parsed_results:
                     basic_fieldnames = ['scraped_at', 'title', 'url', 'work_id']
-                    output_path = csv_handler.save_to_csv(parsed_results, output_file, fieldnames=basic_fieldnames)
+                    
+                    current_output_filename = output_file
+                    # --data-search または --data-search-project で --output の指定がない場合、専用のファイル名を生成
+                    if (data_search_project or data_search) and not current_output_filename:
+                        prefix = "lancers_data_search_project" if data_search_project else "lancers_data_search_task"
+                        current_output_filename = csv_handler.generate_filename(prefix=prefix)
+                    
+                    output_path = csv_handler.save_to_csv(parsed_results, current_output_filename, fieldnames=basic_fieldnames)
                     if output_path:
                         logger.info(f"スクレイピング結果を保存しました: {output_path}")
                         logger.info(f"保存した案件数: {len(parsed_results)}件")
@@ -384,6 +393,7 @@ async def main():
                      upload_gdrive_flag=args.upload_gdrive,
                      gdrive_folder_id_val=args.gdrive_folder_id,
                      gdrive_credentials_val=args.gdrive_credentials
+                     # apply_filter_flag は削除されたので渡さない
                  )
             else:
                  logger.warning("実行するタスクが指定されていません (--search-query, --data-search, --data-search-project, --extract-urls, --scrape-urls のいずれかが必要です)。")

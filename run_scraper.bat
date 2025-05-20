@@ -18,16 +18,41 @@ echo  Lancers Scraper メインメニュー
 echo ===================================
 echo 1. キーワードを選択して検索・処理を行う
 echo 2. 既存CSVから詳細情報を直接取得する
-echo 3. 終了
+echo 3. データ検索(プロジェクト案件)を実行しアップロード
+echo 4. 終了
 echo.
-set /p top_choice="番号を選択してください (1-3): "
+set /p top_choice="番号を選択してください (1-4): "
 
 if "%top_choice%"=="1" goto select_keyword_initial
 if "%top_choice%"=="2" goto details_direct
-if "%top_choice%"=="3" goto end
+if "%top_choice%"=="3" goto data_search_project_direct
+if "%top_choice%"=="4" goto end
 echo 無効な選択です。もう一度入力してください。
 pause
 goto top_menu
+
+:data_search_project_direct
+cls
+echo --- データ検索(プロジェクト案件)を実行します ---
+REM フィルタリングの選択肢を削除
+echo フィルタリング処理はPythonスクリプトから削除されました。
+
+set UPLOAD_ARGS_DSP=
+set /p upload_gdrive_choice_dsp="結果をGoogle Driveにアップロードしますか？ (y/n/0でキャンセル): "
+if "%upload_gdrive_choice_dsp%"=="0" goto top_menu
+if /I "%upload_gdrive_choice_dsp%"=="y" (
+    set UPLOAD_ARGS_DSP=--upload-gdrive --gdrive-folder-id "%GDRIVE_FOLDER_ID%" --gdrive-credentials "%GDRIVE_CREDENTIALS_PATH%"
+)
+
+REM --output は指定せず、Python側で自動生成させる
+REM APPLY_FILTER_ARGS_DSP を削除
+set PYTHON_EXEC_DSP=python %SCRIPT_PATH% --data-search-project %UPLOAD_ARGS_DSP%
+echo %PYTHON_EXEC_DSP%
+%PYTHON_EXEC_DSP%
+if errorlevel 1 (
+    echo データ検索(プロジェクト案件)処理でエラーが発生しました。
+)
+goto end_pause_and_return
 
 :select_keyword_initial
 REM キーワード選択とそれに続く処理の開始点
