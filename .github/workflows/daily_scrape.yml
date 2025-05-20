@@ -23,6 +23,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
       - name: Set up Google Cloud credentials
         env:
           GDRIVE_SA_KEY_JSON_CONTENT: ${{ secrets.GDRIVE_SA_KEY_JSON }}
@@ -37,6 +40,7 @@ jobs:
           LANCERS_EMAIL: ${{ secrets.LANCERS_EMAIL }}
           LANCERS_PASSWORD: ${{ secrets.LANCERS_PASSWORD }}
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+          PYTHONIOENCODING: utf-8 # 標準入出力エンコーディングをUTF-8に設定
           # GDRIVE_CREDENTIALS_PATH は上のステップで $GITHUB_ENV に設定済み
         run: |
           if [ ! -f keywords.txt ]; then
@@ -52,8 +56,6 @@ jobs:
             echo "--------------------------------------------------"
             echo "Processing keyword: $keyword"
             echo "--------------------------------------------------"
-            # 出力ファイル名はPythonスクリプト内で自動生成される想定
-            # --no-headless はCI環境では通常不要 (デフォルトでヘッドレス)
             python src/main.py --search-query "$keyword" --upload-gdrive
             echo "Finished processing keyword: $keyword"
             echo "--------------------------------------------------"
