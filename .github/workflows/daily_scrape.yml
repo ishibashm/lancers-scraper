@@ -9,6 +9,10 @@ on:
 jobs:
   scrape_and_upload:
     runs-on: ubuntu-latest
+    # JSTの土日 (UTCの金曜・土曜) は実行しない
+    # workflow_dispatchの場合は曜日に関わらず実行
+    # cron '0 0 * * *' (UTC 0時 = JST 9時) のため、UTCのFri/SatがJSTのSat/Sunに対応
+    if: github.event_name == 'workflow_dispatch' || (github.event.schedule && !contains(fromJson('["Fri", "Sat"]'), format('{0:ddd}', github.event.schedule)))
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
